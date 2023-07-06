@@ -5,7 +5,7 @@
 # License: BSD 3 clause
 
 import numpy as np
-
+import pdb
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.base import BaseEstimator, RegressorMixin
 
@@ -39,10 +39,10 @@ class KernelRegression(BaseEstimator, RegressorMixin):
     sklearn.metrics.pairwise.kernel_metrics : List of built-in kernels.
     """
 
-    def __init__(self, block, kernel="rbf", gamma=None):
-        self.kernel = kernel
-        self.gamma = gamma
-        self.block = block
+    def __init__(self, block=5, kernel="rbf", gamma=None):
+            self.kernel = kernel
+            self.gamma = gamma
+            self.block = block
 
     def fit(self, X, y):
         """Fit the model
@@ -81,9 +81,22 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         y : array of shape = [n_samples]
             The predicted target value.
         """
-        K = pairwise_kernels(self.X, X, metric=self.kernel, gamma=self.gamma)
-        return (K * self.y[:, None]).sum(axis=0) / K.sum(axis=0)
-
+            
+        K = pairwise_kernels(self.X, X, metric=self.kernel, gamma=self.gamma) # K: (100, 100)
+        output = (K * self.y[:, None]).sum(axis=0) / K.sum(axis=0) # output: (100,) self.y[:, None]: (100, 1)
+        pdb.set_trace()
+            
+        return output
+    
+    def forward(self, X):
+        
+        block = self.block
+        
+        for i in range(block):
+            output = self.predict(X)
+            X = np.expand_dims(output, axis=1)
+        return output
+    
     def _optimize_gamma(self, gamma_values):
         # Select specific value of gamma from the range of given gamma_values
         # by minimizing mean-squared error in leave-one-out cross validation

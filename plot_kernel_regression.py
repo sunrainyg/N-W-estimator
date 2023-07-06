@@ -48,7 +48,7 @@ y_svr = svr.fit(X, y).predict(X)
 print("SVR complexity and bandwidth selected and model fitted in %.3f s" \
     % (time.time() - t0))
 t0 = time.time()
-y_kr = kr.fit(X, y).predict(X) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
+y_kr = kr.fit(X, y).forward(X) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
 print("KR including bandwith fitted in %.3f s" \
     % (time.time() - t0))
 

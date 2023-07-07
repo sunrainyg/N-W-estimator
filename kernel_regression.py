@@ -39,7 +39,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
     sklearn.metrics.pairwise.kernel_metrics : List of built-in kernels.
     """
 
-    def __init__(self, block=5, kernel="rbf", gamma=None):
+    def __init__(self, block=1, kernel="rbf", gamma=None):
             self.kernel = kernel
             self.gamma = gamma
             self.block = block
@@ -84,7 +84,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
             
         K = pairwise_kernels(self.X, X, metric=self.kernel, gamma=self.gamma) # K: (100, 100)
         output = (K * self.y[:, None]).sum(axis=0) / K.sum(axis=0) # output: (100,) self.y[:, None]: (100, 1)
-        pdb.set_trace()
+        # pdb.set_trace()
             
         return output
     

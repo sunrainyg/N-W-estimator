@@ -14,7 +14,6 @@ from __future__ import print_function
 print(__doc__)
 
 import time
-
 import numpy as np
 from sklearn.svm import SVR
 from sklearn.model_selection import RandomizedSearchCV, GridSearchCV, train_test_split, learning_curve  
@@ -35,7 +34,6 @@ y = np.sin(X).ravel()
 y += 0.5 * (0.5 - np.random.rand(y.size))
 # plt.plot(X,y)
 # plt.show()
-# pdb.set_trace()
 
 ###############################################################################
 # Fit regression models

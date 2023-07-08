@@ -1,6 +1,7 @@
 '''Construct kernel model with EigenPro optimizer.'''
 import collections
 import time
+import pdb
 import torch
 
 import torch.nn as nn
@@ -208,6 +209,7 @@ class FKR_EigenPro(nn.Module):
         train_sec = 0  # training time in seconds
 
         for epoch in epochs:
+
             start = time.time()
             for _ in range(epoch - initial_epoch):
                 epoch_ids = np.random.choice(

@@ -1,8 +1,8 @@
 '''Implementation of kernel functions.'''
-
 import torch
 import cifar
 import pdb
+import numpy as np
 
 eps = 1e-12
 
@@ -17,20 +17,21 @@ def euclidean_distances(samples, centers, squared=True):
     Returns:
         pointwise distances (n_sample, n_center).
     '''
-    samples_norm = torch.sum(samples**2, dim=1, keepdim=True) # center: torch.Size([49000, 3072]); samples: torch.Size([1758, 3072])
+    samples_norm = np.sum(samples**2, axis=1) # center: torch.Size([49000, 3072]); samples: torch.Size([1758, 3072])
     if samples is centers:
         centers_norm = samples_norm
     else:
-        centers_norm = torch.sum(centers**2, dim=1, keepdim=True)
-    centers_norm = torch.reshape(centers_norm, (1, -1))
+        centers_norm = np.sum(centers**2, axis=1)
+    centers_norm = np.reshape(centers_norm, (1, -1))
 
-    distances = samples.mm(torch.t(centers)) # distances: torch.Size([1758, 49000])
-    distances.mul_(-2)
-    distances.add_(samples_norm)
-    distances.add_(centers_norm)
+    distances = np.matmul(samples, centers.T) # distances: torch.Size([1758, 49000])
+    distances *= -2
+    distances += samples_norm
+    distances += centers_norm
+    
     if not squared:
-        distances.clamp_(min=0)        
-        distances.sqrt_()
+        distances = np.maximum(distances, 0)
+        distances = np.sqrt(distances)
 
     return distances
 
@@ -49,10 +50,10 @@ def gaussian(samples, centers, bandwidth):
     
     assert bandwidth > 0
     kernel_mat = euclidean_distances(samples, centers)
-    kernel_mat.clamp_(min=0)
+    kernel_mat = np.maximum(kernel_mat, 0)
     gamma = 1. / (2 * bandwidth ** 2)
-    kernel_mat.mul_(-gamma)
-    kernel_mat.exp_()
+    kernel_mat += -gamma
+    np.exp(kernel_mat, out=kernel_mat)
     return kernel_mat
 
 

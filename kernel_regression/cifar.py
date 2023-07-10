@@ -73,7 +73,7 @@ def load_CIFAR10(ROOT):
     Xte, Yte = load_CIFAR_batch(os.path.join(ROOT, 'test_batch'))
     return Xtr, Ytr, Xte, Yte
     
-def load(cifar10_dir, num_training=49000, num_validation=1000, num_test=10000):
+def load(cifar10_dir, num_training=50000, num_validation=0, num_test=10000):
     n_class = 10
     # Load the raw CIFAR-10 data
     X_train, y_train, X_test, y_test = load_CIFAR10(cifar10_dir)
@@ -92,8 +92,8 @@ def load(cifar10_dir, num_training=49000, num_validation=1000, num_test=10000):
     x_train = X_train.astype('float32')
     x_test = X_test.astype('float32')
 
-    x_train /= 255
-    x_test /= 255
+    x_train /= 255.0
+    x_test /= 255.0
     
     y_train = to_categorical(y_train, n_class) # label -> one hot
     y_test = to_categorical(y_test, n_class)

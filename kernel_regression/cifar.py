@@ -26,6 +26,7 @@ def to_categorical(y, num_classes=None, dtype='float32'):
         A binary matrix representation of the input. The classes axis
         is placed last.
     """
+    
     y = np.array(y, dtype='int')
     input_shape = y.shape
     if input_shape and input_shape[-1] == 1 and len(input_shape) > 1:
@@ -35,6 +36,7 @@ def to_categorical(y, num_classes=None, dtype='float32'):
         num_classes = np.max(y) + 1
     n = y.shape[0]
     categorical = np.zeros((n, num_classes), dtype=dtype)
+
     categorical[np.arange(n), y] = 1
     output_shape = input_shape + (num_classes,)
     categorical = np.reshape(categorical, output_shape)
@@ -73,7 +75,7 @@ def load_CIFAR10(ROOT):
     Xte, Yte = load_CIFAR_batch(os.path.join(ROOT, 'test_batch'))
     return Xtr, Ytr, Xte, Yte
     
-def load(cifar10_dir, num_training=50000, num_validation=0, num_test=10000):
+def load_10classes(cifar10_dir, num_training=50000, num_validation=0, num_test=10000):
     n_class = 10
     # Load the raw CIFAR-10 data
     X_train, y_train, X_test, y_test = load_CIFAR10(cifar10_dir)
@@ -94,11 +96,48 @@ def load(cifar10_dir, num_training=50000, num_validation=0, num_test=10000):
 
     x_train /= 255.0
     x_test /= 255.0
-    
+
     y_train = to_categorical(y_train, n_class) # label -> one hot
     y_test = to_categorical(y_test, n_class)
 
     # return x_train, y_train, X_val, y_val, x_test, y_test
+    return (x_train, y_train), (x_test, y_test)
+
+def load_2classes(cifar10_dir, num_training=49000, num_validation=1000, num_test=10000):
+    n_class = 4
+    # Load the raw CIFAR-10 data
+    X_train, y_train, X_test, y_test = load_CIFAR10(cifar10_dir)
+    
+    # 制作mask, 类别为1和类别为2的，mask里会置为1
+    mask_class_train_1      = y_train == 0 # 指定类别
+    mask_class_train_2      = y_train == 1 # 指定类别
+    mask_class_test_1       = y_test  == 0
+    mask_class_test_2       = y_test  == 1
+    
+    mask_class_train_1      = mask_class_train_1.astype(int)
+    mask_class_train_2      = mask_class_train_2.astype(int)
+    mask_class_test_1       = mask_class_test_1.astype(int)
+    mask_class_test_2       = mask_class_test_2.astype(int)
+    
+    mask_class_train        = np.bitwise_or(mask_class_train_1, mask_class_train_2)
+    mask_class_test         = np.bitwise_or(mask_class_test_1, mask_class_test_2)
+    
+    # 制作数据，二分类，类别1和类别2，训练集1w张，测试集2000张
+    X_train_2clses          = X_train[mask_class_train==1]
+    Y_train_2clses          = y_train[mask_class_train==1]
+    X_test_2clses           = X_test[mask_class_test==1]
+    Y_test_2clses           = y_test[mask_class_test==1]
+
+    x_train = X_train_2clses.astype('float32')
+    x_test = X_test_2clses.astype('float32')
+
+    x_train /= 255.0
+    x_test /= 255.0
+
+    y_train = to_categorical(Y_train_2clses, n_class) # label -> one hot
+    y_test = to_categorical(Y_test_2clses, n_class)
+    
+    # pdb.set_trace()
     return (x_train, y_train), (x_test, y_test)
 
 # Invoke the above function to get our data.

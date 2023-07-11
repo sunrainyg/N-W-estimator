@@ -74,17 +74,18 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         return self
     
     def matrix_multiplication_sum(self, weight, y_train):
-        rows_A, cols_A = weight.shape
-        rows_B, cols_B = y_train.shape
 
-        assert cols_A == rows_B, "矩阵 A 的列数必须等于矩阵 B 的行数"
+        # assert weight.shape[1] == y_train.shape[0], "矩阵 A 的列数必须等于矩阵 B 的行数"
+        # result = np.zeros((weight.shape[0], y_train.shape[1]))
 
-        result = np.zeros((rows_A, 1))
-
-        for i in range(rows_A):
-            for j in range(cols_A):
-                result[i] += np.dot(weight(i,i), y_train(i,j))
-
+        # row_sum = 0
+        # for i in range(weight.shape[0]):
+        #     for j in range(weight.shape[1]):
+        #         logit = weight[i][j] * y_train[j]
+        #         row_sum = row_sum + logit 
+        #     result[i] = row_sum
+        #     row_sum = 0
+        result = np.dot(weight, y_train)
         return result
 
     def predict(self, x_test, y_test):
@@ -103,8 +104,8 @@ class KernelRegression(BaseEstimator, RegressorMixin):
 
         K_test          = pairwise_kernels(self.x_train, x_test, metric=self.kernel, gamma=self.gamma) # K.shape (49000, 10000)
         normalized_K    = self.normalize_rows(K_test.T) # normalized_K.shape: (10000, 50000)
-        output          = self.matrix_multiplication_sum()
-        pdb.set_trace()
+        output          = self.matrix_multiplication_sum(normalized_K, self.y_train)
+
         # output = np.matmul(normalized_K, self.y_train)
         
         eval_metrics = {}
@@ -127,7 +128,7 @@ if __name__ == "__main__":
     ##### cifar
     n_class = 10
     cifar10_dir = '/lustre/grp/gyqlab/lism/brt/language-vision-interface/N-W-estimator/dataset/cifar10/cifar-10-batches-py'
-    (x_train, y_train), (x_test, y_test) = cifar.load(cifar10_dir)
+    (x_train, y_train), (x_test, y_test) = cifar.load_2classes(cifar10_dir)
     x_train, y_train, x_test, y_test = x_train.astype('float32'), \
     y_train.astype('float32'), x_test.astype('float32'), y_test.astype('float32')
     

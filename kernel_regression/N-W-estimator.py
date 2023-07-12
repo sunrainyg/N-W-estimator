@@ -1,3 +1,5 @@
+## copyright Yulu Gan 2023.
+
 import numpy as np
 import pdb
 import time
@@ -131,10 +133,9 @@ if __name__ == "__main__":
     (x_train, y_train), (x_test, y_test) = cifar.load_2classes(cifar10_dir)
     x_train, y_train, x_test, y_test = x_train.astype('float32'), \
     y_train.astype('float32'), x_test.astype('float32'), y_test.astype('float32')
-    
     # Fit regression models
     t0 = time.time()
-    kr = KernelRegression(kernel="rbf", gamma=0.1)
+    kr = KernelRegression(kernel="laplacian", gamma=0.5)
     # y_kr = kr.fit(X, y).forward(X) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
     y_kr = kr.fit(x_train, y_train).forward(x_test, y_test) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
     print("KR including bandwith fitted in %.3f s" \
@@ -148,7 +149,7 @@ if __name__ == "__main__":
     
     # # Fit regression models
     # t0 = time.time()
-    # kr = KernelRegression(kernel="rbf", gamma=0.1)
+    # kr = KernelRegression(kernel="laplacian", gamma=0.5)
     # y_kr = kr.fit(x_train, y_train).forward(x_test, y_test) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
     # print("KR including bandwith fitted in %.3f s" \
     #     % (time.time() - t0))

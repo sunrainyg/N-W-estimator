@@ -3,6 +3,7 @@
 import numpy as np
 import math
 from six.moves import cPickle as pickle
+from sklearn.decomposition import PCA
 import os
 import pdb
 import platform

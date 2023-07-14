@@ -2,6 +2,7 @@ import numpy as np
 import pdb
 import time
 import kernel
+import mnist
 import cifar
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.base import BaseEstimator, RegressorMixin
@@ -105,7 +106,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
 if __name__ == "__main__":
     n_class = 10
     cifar10_dir = '/lustre/grp/gyqlab/lism/brt/language-vision-interface/N-W-estimator/dataset/cifar10/cifar-10-batches-py'
-    (x_train, y_train), (x_test, y_test) = cifar.load(cifar10_dir)
+    (x_train, y_train), (x_test, y_test) = cifar.load_2classes(cifar10_dir)
     x_train, y_train, x_test, y_test = x_train.astype('float32'), \
     y_train.astype('float32'), x_test.astype('float32'), y_test.astype('float32')
     
@@ -118,3 +119,17 @@ if __name__ == "__main__":
     y_kr = kr.fit(x_train, y_train).forward(x_test, y_test) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
     print("KR including bandwith fitted in %.3f s" \
         % (time.time() - t0))
+    
+    
+    # n_class = 10
+    # (x_train, y_train), (x_test, y_test) = mnist.load()
+    # x_train, y_train, x_test, y_test = x_train.astype('float32'), \
+    #     y_train.astype('float32'), x_test.astype('float32'), y_test.astype('float32')
+
+    # kernel_fn = lambda x,y: kernel.gaussian(x, y, bandwidth=5)
+    # kr = KernelRegression(kernel_fn, kernel="rbf", gamma=0.02)
+
+    # # y_kr = kr.fit(X, y).forward(X) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
+    # y_kr = kr.fit(x_train, y_train).forward(x_test, y_test) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
+    # print("KR including bandwith fitted in %.3f s" \
+    #     % (time.time() - t0))

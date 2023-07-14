@@ -193,11 +193,15 @@ if __name__ == "__main__":
     ## train
     expectation      = kr.fit(x_train_part1, y_train_part1).forward(x_train_part2, y_train_part2)
     error_gt2        = y_train_part2 - expectation #每一层存x, y
+    
     error_est2       = kr.fit(x_train_part2, error_gt2).forward(x_train_part3, y_train_part3)
     error_gt3        = y_train_part3 - error_est2 - expectation
+    
     error_est3       = kr.fit(x_train_part3, error_gt3).forward(x_train_part4, y_train_part4)
     error_gt4        = y_train_part4 - error_est3 - error_est2 - expectation
+    
     error_est4       = kr.fit(x_train_part4, error_gt4).forward(x_train_part5, y_train_part5)
+    error_gt5        = y_train_part5 - error_est4 - error_est3 - error_est2 - expectation
     
     
     ## inference
@@ -205,7 +209,7 @@ if __name__ == "__main__":
     error_est1       = kr.fit(x_train_part2, error_gt2).forward(x_test, y_test) #layer2
     error_est2       = kr.fit(x_train_part3, error_gt3).forward(x_test, y_test) #layer3
     error_est3       = kr.fit(x_train_part4, error_gt4).forward(x_test, y_test) #layer4
-    error_est4       = kr.fit(x_train_part5, error_gt4).forward(x_test, y_test) #layer4
+    error_est4       = kr.fit(x_train_part5, error_gt5).forward(x_test, y_test) #layer4
     
     result5           = expectation_inf + error_est1 + error_est2 + error_est3 + error_est4
     result4           = expectation_inf + error_est1 + error_est2 + error_est3

@@ -44,14 +44,13 @@ class KernelRegression(BaseEstimator, RegressorMixin):
             self.gamma = gamma
             self.block = block
 
-    import numpy as np
 
     def normalize_rows(self, matrix):
         row_sums = matrix.sum(axis=1)  # 求每一行的总和
         normalized_matrix = matrix / row_sums[:, np.newaxis]  # 将每一行元素除以该行总和
         return normalized_matrix
 
-    def fit(self, x_train, y_train):
+    def fit(self, x_train, y_train, M=None):
         """Fit the model
 
         Parameters
@@ -67,6 +66,10 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         self : object
             Returns self.
         """
+        if M is None:
+            M = np.eye(x_train.shape[-1])
+            self.M = M
+            
         self.x_train = x_train
         self.y_train = y_train
 
@@ -89,7 +92,152 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         #     row_sum = 0
         result = np.dot(weight, y_train)
         return result
+    
+    def euclidean_distances_M(self, samples, centers, M, squared=True):
+        '''
+        Calculate the Euclidean Distances between the samples and centers, using Ma distance
+        '''
 
+        ## Obtain a vector containing the square norm value for each sample point.
+        samples_norm2 = np.sum((samples @ M) * samples, axis=-1)
+
+        if samples is centers:
+            centers_norm2 = samples_norm2
+        else:
+            centers_norm2 = np.sum((centers @ M) * centers, axis=-1)
+
+        distances = -2 * np.dot(samples @ M, centers.T)
+        distances += samples_norm2[:, np.newaxis]
+        distances += centers_norm2
+
+        if not squared:
+            np.clip(distances, 0, None, out=distances)
+            np.sqrt(distances, out=distances)
+
+        return distances
+    
+    def euclidean_distances(self, samples, centers, squared=True):
+    
+        samples_norm2 = np.sum(samples**2, axis=-1)
+        
+        if samples is centers:
+            centers_norm2 = samples_norm2
+        else:
+            centers_norm2 = np.sum(centers**2, axis=-1)
+        
+        distances = -2 * np.dot(samples, centers.T)
+        distances += samples_norm2[:, np.newaxis]
+        distances += centers_norm2
+        
+        if not squared:
+            np.clip(distances, 0, None, out=distances)
+            np.sqrt(distances, out=distances)
+        
+        return distances
+    
+    def laplacian_M(self, samples, centers, M, bandwidth):
+        '''
+        Laplacian kernel using Ma distance.
+
+        Args:
+            samples: of shape (n_sample, n_feature).
+            centers: of shape (n_center, n_feature).
+            M: of shape (n_feature, n_feature) or (n_feature,)
+            bandwidth: kernel bandwidth.
+
+        Returns:
+            kernel matrix of shape (n_sample, n_center).
+        '''
+        assert bandwidth > 0
+        kernel_mat = self.euclidean_distances_M(samples, centers, M, squared=False)
+        kernel_mat = np.clip(kernel_mat, 0, None)
+        gamma = 1.0 / bandwidth
+        kernel_mat *= -gamma
+        np.exp(kernel_mat, out=kernel_mat)
+        return kernel_mat
+    
+    def laplacian(self, samples, centers, bandwidth):
+        '''Laplacian kernel.
+
+        Args:
+            samples: of shape (n_sample, n_feature).
+            centers: of shape (n_center, n_feature).
+            bandwidth: kernel bandwidth.
+
+        Returns:
+            kernel matrix of shape (n_sample, n_center).
+        '''
+        assert bandwidth > 0
+        kernel_mat = self.euclidean_distances(samples, centers, squared=False)
+        kernel_mat = np.clip(kernel_mat, 0, None)
+        gamma = 1.0 / bandwidth
+        kernel_mat *= -gamma
+        np.exp(kernel_mat, out=kernel_mat)
+        return kernel_mat
+
+
+    def update_M(self, samples, centers):
+        '''
+        Input:  samples - Training set
+                self.weights - alpha
+                
+        Notion: K := K_M(X,X) / ||x-z||_M
+                samples_term := Mx * K_M(x,z)
+                centers_term := Mz * K_M(x,z)
+                
+        Equation: grad(K_M(x,z)) = (Mx-Mz) * (K_M(x,z)) / (L||x-z||_M),
+        where x is samples, z is center,
+        '''
+
+        K = self.laplacian_M(samples, centers)  # K_M(X, X)
+
+        dist = np.linalg.norm(samples[:, np.newaxis] - centers, axis=-1)  # Ma distance using numpy's norm
+        dist = np.where(dist < 1e-10, np.zeros(1, dtype=dist.dtype), dist)  # Set those small values to 0 to avoid errors caused by dividing by too small a number.
+
+        K = K / dist  # K_M(X,X) / M_distance
+        K[np.isinf(K)] = 0.  # avoid infinite big values
+
+        p, d = centers.shape
+        p, c = self.weights.shape
+        n, d = samples.shape
+
+        samples_term = (
+                K  # (n, p)
+                @ self.weights  # (p, c)
+            ).reshape(n, c, 1)  ## alpha * K_M(X,X) / M_distance
+
+        if self.diag:
+            centers_term = (
+                K  # (n, p)
+                @ (
+                    self.weights.reshape(p, c, 1) * (centers * self.M).reshape(p, 1, d)
+                ).reshape(p, c * d)  # (p, cd)
+            ).reshape(n, c, d)  # (n, c, d)
+
+            samples_term = samples_term * (samples * self.M).reshape(n, 1, d)
+        else:
+            centers_term = (
+                K  # (n, p)
+                @ (
+                    self.weights.reshape(p, c, 1) * (centers @ self.M).reshape(p, 1, d)
+                ).reshape(p, c * d)  # (p, cd)
+            ).reshape(n, c, d)  # (n, c, d)
+
+            samples_term = samples_term * (samples @ self.M).reshape(n, 1, d)
+
+        G = (centers_term - samples_term) / self.bandwidth  # (n, c, d)
+
+        if self.centering:
+            G = G - G.mean(0)  # (n, c, d)
+
+        if self.diag:
+            np.einsum('ncd, ncd -> d', G, G) / len(samples)
+        else:
+            self.M = np.einsum('ncd, ncD -> dD', G, G) / len(samples)
+            print("self.M.shape:", self.M.shape)
+
+
+            
     def predict(self, x_test, y_test):
         """Predict target values for X.
 
@@ -103,8 +251,8 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         y : array of shape = [n_samples]
             The predicted target value.
         """
-
-        K_test          = pairwise_kernels(self.x_train, x_test, metric=self.kernel, gamma=self.gamma) # K.shape (49000, 10000)
+        # K_test          = pairwise_kernels(self.x_train, x_test, metric=self.kernel, gamma=self.gamma) # K.shape (49000, 10000)
+        K_test          = self.laplacian_M(self.x_train, x_test, self.M, self.gamma)
         normalized_K    = self.normalize_rows(K_test.T) # normalized_K.shape: (10000, 50000)
         output          = self.matrix_multiplication_sum(normalized_K, self.y_train)
 
@@ -129,7 +277,7 @@ if __name__ == "__main__":
     
     ##### cifar
     n_class = 10
-    cifar10_dir = '/lustre/grp/gyqlab/lism/brt/language-vision-interface/N-W-estimator/dataset/cifar10/cifar-10-batches-py'
+    cifar10_dir = '/Users/yulu/N-W-estimator/dataset/cifar10/cifar-10-batches-py'
     (x_train, y_train), (x_test, y_test) = cifar.load_10classes(cifar10_dir)
     x_train, y_train, x_test, y_test = x_train.astype('float32'), \
     y_train.astype('float32'), x_test.astype('float32'), y_test.astype('float32')
@@ -148,7 +296,7 @@ if __name__ == "__main__":
     y_train_part5 = y_train[40000:50000]
     
     t0 = time.time()
-    kr = KernelRegression(kernel="rbf", gamma=0.1)
+    kr = KernelRegression(kernel="rbf", gamma=0.8)
     # y_kr = kr.fit(X, y).forward(X) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
     
     #### 1 layer:

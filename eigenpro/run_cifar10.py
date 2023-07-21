@@ -6,7 +6,7 @@ import pdb
 import eigenpro
 
 n_class = 10
-cifar10_dir = '/lustre/grp/gyqlab/lism/brt/language-vision-interface/N-W-estimator/dataset/cifar10/cifar-10-batches-py'
+cifar10_dir = '/Users/yulu/N-W-estimator/dataset/cifar10/cifar-10-batches-py'
 (x_train, y_train), (x_test, y_test) = cifar.load(cifar10_dir)
 x_train, y_train, x_test, y_test = x_train.astype('float32'), \
     y_train.astype('float32'), x_test.astype('float32'), y_test.astype('float32')

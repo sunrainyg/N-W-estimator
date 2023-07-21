@@ -105,6 +105,6 @@ def load(cifar10_dir, num_training=49000, num_validation=1000, num_test=10000):
 
 if __name__ == "__main__":
 
-    cifar10_dir = '/lustre/grp/gyqlab/lism/brt/language-vision-interface/N-W-estimator/dataset/cifar10/cifar-10-batches-py'
+    cifar10_dir = '/Users/yulu/N-W-estimator/dataset/cifar10/cifar-10-batches-py'
     # x_train, y_train, x_val, y_val, x_test, y_test = load(cifar10_dir)
     (x_train, y_train), (x_test, y_test) = load(cifar10_dir)

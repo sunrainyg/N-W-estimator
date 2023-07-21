@@ -19,9 +19,14 @@ def euclidean_distances(samples, centers, squared=True):
     return distances
 
 def euclidean_distances_M(samples, centers, M, squared=True):
+    '''
+    Calculate the Euclidean Distances between the samples and centers, using Ma distance
+    '''
+    
     if len(M.shape)==1:
         return euclidean_distances_M_diag(samples, centers, M, squared=squared)
     
+    ## Obtain a vector containing the square norm value for each sample point.
     samples_norm2 = ((samples @ M) * samples).sum(-1)
 
     if samples is centers:
@@ -78,13 +83,19 @@ def laplacian(samples, centers, bandwidth):
 
 
 def laplacian_M(samples, centers, M, bandwidth):
+    '''
+    Equation: exp(\gamma * (x-xi)M(x-xi)^T)
+    '''
+    
     assert bandwidth > 0
     kernel_mat = euclidean_distances_M(samples, centers, M, squared=False)
-    kernel_mat.clamp_(min=0)
+    kernel_mat.clamp_(min=0) # Guaranteed non-negative
     gamma = 1. / bandwidth
-    kernel_mat.mul_(-gamma)
-    kernel_mat.exp_()
+    kernel_mat.mul_(-gamma) # point-wise multiply
+    kernel_mat.exp_() #point-wise exp
     return kernel_mat
+
+
 
 def laplacian_M_grad1(samples, centers, M, bandwidth):
     assert bandwidth > 0

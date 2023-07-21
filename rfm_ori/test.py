@@ -8,7 +8,7 @@ def fstar(X):
     	    axis=1
         ).float()
 
-model =LaplaceRFM(bandwidth=1.)
+model = LaplaceRFM(bandwidth=1.)
 
 n = 4000 # samples
 d = 100  # dimension

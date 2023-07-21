@@ -1,5 +1,5 @@
 try:
-    from eigenpro2 import KernelModel
+    from eigenpro3.models import KernelModel
     EIGENPRO_AVAILABLE = True
 except ModuleNotFoundError:
     print('`eigenpro2` not installed.. using torch.linalg.solve for training kernel model')
@@ -110,7 +110,7 @@ class RecursiveFeatureMachine(torch.nn.Module):
             print("Dataset shape: x_train - {}, y_train - {}, x_test - {}, y_test - {}".format(X_train.shape, y_train.shape, X_test.shape, y_test.shape))
             
         for i in range(iters):
-            ## calculate self.M and self.weight
+            ## initiate self.M and calculate self.weight
             self.fit_predictor(X_train, y_train)
             
             if classif:

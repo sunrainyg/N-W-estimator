@@ -1,6 +1,10 @@
 ## copyright Yulu Gan 2023.
 
+import sys
+sys.path.append("./")
+from eigenpro import eigenpro
 import numpy as np
+import torch
 import pdb
 import time
 import kernel
@@ -41,9 +45,9 @@ class KernelRegression(BaseEstimator, RegressorMixin):
 
     def __init__(self, block=1, kernel="rbf", gamma=None):
             self.kernel = kernel
-            self.gamma = gamma
-            self.block = block
-
+            self.gamma  = gamma
+            self.block  = block
+            self.device = [torch.device('cpu')]
 
     def normalize_rows(self, matrix):
         row_sums = matrix.sum(axis=1)  # 求每一行的总和
@@ -69,7 +73,8 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         if M is None:
             M = np.eye(x_train.shape[-1])
             self.M = M
-            
+        self.kernel         = lambda x, z: self.laplacian_M(x, z, self.M, self.gamma) 
+        self.kernel_tensor  = lambda x, z: self.laplacian_M_tensor(x, z, self.M, self.gamma) 
         self.x_train = x_train
         self.y_train = y_train
 
@@ -116,6 +121,32 @@ class KernelRegression(BaseEstimator, RegressorMixin):
 
         return distances
     
+    def euclidean_distances_M_tensor(self, samples, centers, M, squared=True):
+        '''
+        Calculate the Euclidean Distances between the samples and centers, using Ma distance
+        '''
+        
+        ## Obtain a vector containing the square norm value for each sample point.
+        samples_norm2 = ((samples @ M) * samples).sum(-1)
+
+        if samples is centers:
+            centers_norm2 = samples_norm2
+        else:
+            centers_norm2 = ((centers @ M) * centers).sum(-1)
+            
+        samples = samples.double()
+        centers = centers.double()
+        M       = M.astype(np.float64)
+        
+        distances = -2 * (samples @ M) @ centers.T
+        distances.add_(samples_norm2.view(-1, 1))
+        distances.add_(centers_norm2)
+
+        if not squared:
+            distances.clamp_(min=0).sqrt_()
+
+        return distances
+    
     def euclidean_distances(self, samples, centers, squared=True):
     
         samples_norm2 = np.sum(samples**2, axis=-1)
@@ -156,6 +187,19 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         np.exp(kernel_mat, out=kernel_mat)
         return kernel_mat
     
+    def laplacian_M_tensor(self, samples, centers, M, bandwidth):
+        '''
+        Equation: exp(\gamma * (x-xi)M(x-xi)^T)
+        '''
+        
+        assert bandwidth > 0
+        kernel_mat = self.euclidean_distances_M_tensor(samples, centers, M, squared=False)
+        kernel_mat.clamp_(min=0) # Guaranteed non-negative
+        gamma = 1. / bandwidth
+        kernel_mat.mul_(-gamma) # point-wise multiply
+        kernel_mat.exp_() #point-wise exp
+        return kernel_mat
+    
     def laplacian(self, samples, centers, bandwidth):
         '''Laplacian kernel.
 
@@ -175,11 +219,11 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         np.exp(kernel_mat, out=kernel_mat)
         return kernel_mat
 
-
-    def update_M(self, samples, centers):
+    def update_M(self, samples, centers, weights):
         '''
-        Input:  samples - Training set
-                self.weights - alpha
+        Input:  samples - test set
+                centers - training set 
+                weights - alpha
                 
         Notion: K := K_M(X,X) / ||x-z||_M
                 samples_term := Mx * K_M(x,z)
@@ -189,7 +233,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         where x is samples, z is center,
         '''
 
-        K = self.laplacian_M(samples, centers)  # K_M(X, X)
+        K = self.kernel(samples, centers)  # K_M(X, X)
 
         dist = np.linalg.norm(samples[:, np.newaxis] - centers, axis=-1)  # Ma distance using numpy's norm
         dist = np.where(dist < 1e-10, np.zeros(1, dtype=dist.dtype), dist)  # Set those small values to 0 to avoid errors caused by dividing by too small a number.
@@ -225,7 +269,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
 
             samples_term = samples_term * (samples @ self.M).reshape(n, 1, d)
 
-        G = (centers_term - samples_term) / self.bandwidth  # (n, c, d)
+        G = (centers_term - samples_term) / self.gamma  # (n, c, d)
 
         if self.centering:
             G = G - G.mean(0)  # (n, c, d)
@@ -236,8 +280,31 @@ class KernelRegression(BaseEstimator, RegressorMixin):
             self.M = np.einsum('ncd, ncD -> dD', G, G) / len(samples)
             print("self.M.shape:", self.M.shape)
 
+    def fit_predictor_lstsq(self, centers, targets):
+        '''
+        Function: solve the alpha
+        Equation: alpha * K(X,X) = Y
+        Return: alpha
+        '''
+        
+        K = self.kernel(centers, centers)
+        reg_matrix = self.reg * np.eye(len(centers))
+        alpha = np.linalg.solve(K + reg_matrix, targets)
+        
+        return alpha
+    
+    def fit_predictor_eigenpro(self, x_train, y_train, x_test, y_test):
+        n_class = 10
+        use_cuda = torch.cuda.is_available()
+        device = torch.device("cuda" if use_cuda else "cpu")
+        model = eigenpro.FKR_EigenPro(self.kernel_tensor, x_train, n_class, device=device)
 
-            
+        x_train, y_train, x_test, y_test = x_train.astype('float64'), \
+            y_train.astype('float64'), x_test.astype('float64'), y_test.astype('float64')
+        res = model.fit(x_train, y_train, x_test, y_test, epochs=[1, 2, 5], mem_gb=12)
+        pdb.set_trace()
+        return self.model.weigts
+       
     def predict(self, x_test, y_test):
         """Predict target values for X.
 
@@ -252,7 +319,18 @@ class KernelRegression(BaseEstimator, RegressorMixin):
             The predicted target value.
         """
         # K_test          = pairwise_kernels(self.x_train, x_test, metric=self.kernel, gamma=self.gamma) # K.shape (49000, 10000)
-        K_test          = self.laplacian_M(self.x_train, x_test, self.M, self.gamma)
+        
+        # epochs = 5
+        # for epoch in range(epochs):
+        #     alpha       = self.fit_predictor_lstsq(x_train, y_train)
+        #     self.M      = self.update_M(x_test, x_train, alpha)
+        #     print("First round finished, M:", self.M)
+        ################
+        alpha           = self.fit_predictor_eigenpro(x_train, y_train, x_test, y_test)
+        self.M          = self.update_M(x_test, x_train, alpha)
+        ################
+        
+        K_test          = self.kernel(self.x_train, x_test)
         normalized_K    = self.normalize_rows(K_test.T) # normalized_K.shape: (10000, 50000)
         output          = self.matrix_multiplication_sum(normalized_K, self.y_train)
 

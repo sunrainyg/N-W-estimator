@@ -6,7 +6,10 @@ import torch
 
 import torch.nn as nn
 import numpy as np
-
+import sys
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
 import svd
 import utils
 
@@ -66,10 +69,11 @@ def asm_eigenpro_fn(samples, map_fn, top_q, bs_gpu, alpha, min_q=5, seed=1):
 
     def eigenpro_fn(grad, kmat):
         '''Function to apply EigenPro preconditioner.'''
-        return torch.mm(eigvecs_t * diag_t,
+
+        return torch.mm(eigvecs_t.double() * diag_t.double(),
                         torch.t(torch.mm(torch.mm(torch.t(grad),
                                                   kmat),
-                                         eigvecs_t)))
+                                         eigvecs_t.double())))
 
     print("SVD time: %.2f, top_q: %d, top_eigval: %.2f, new top_eigval: %.2e" %
           (time.time() - start, top_q, eigvals[0], eigvals[0] / scale))
@@ -113,6 +117,10 @@ class FKR_EigenPro(nn.Module):
         if weight is None:
             weight = self.weight # torch.Size([49000, 10])
         kmat = self.kernel_matrix(samples) # kmat:torch.Size([1758, 49000]); samples:torch.Size([1758, 3072])
+        
+        weight = weight.double()
+        kmat = kmat.double()
+        
         pred = kmat.mm(weight)
         return pred
 
@@ -136,6 +144,7 @@ class FKR_EigenPro(nn.Module):
                          eta, sample_ids, batch_ids):
         # update random coordiate block (for mini-batch)
         grad = self.primal_gradient(x_batch, y_batch, self.weight)
+        self.weight = self.weight.double()
         self.weight.index_add_(0, batch_ids, -eta * grad)
 
         # update fixed coordinate block (for EigenPro)
@@ -212,7 +221,7 @@ class FKR_EigenPro(nn.Module):
         train_sec = 0  # training time in seconds
 
         for epoch in epochs:
-
+            print("Begin training")
             start = time.time()
             for _ in range(epoch - initial_epoch):
                 epoch_ids = np.random.choice(

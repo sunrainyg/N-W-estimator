@@ -1,15 +1,11 @@
 '''Construct kernel model with EigenPro optimizer.'''
 import collections
 import time
-import pdb
 import torch
 
 import torch.nn as nn
 import numpy as np
-import sys
-import os
-current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
+
 import svd
 import utils
 
@@ -69,11 +65,10 @@ def asm_eigenpro_fn(samples, map_fn, top_q, bs_gpu, alpha, min_q=5, seed=1):
 
     def eigenpro_fn(grad, kmat):
         '''Function to apply EigenPro preconditioner.'''
-
-        return torch.mm(eigvecs_t.double() * diag_t.double(),
+        return torch.mm(eigvecs_t * diag_t,
                         torch.t(torch.mm(torch.mm(torch.t(grad),
                                                   kmat),
-                                         eigvecs_t.double())))
+                                         eigvecs_t)))
 
     print("SVD time: %.2f, top_q: %d, top_eigval: %.2f, new top_eigval: %.2e" %
           (time.time() - start, top_q, eigvals[0], eigvals[0] / scale))
@@ -85,9 +80,6 @@ def asm_eigenpro_fn(samples, map_fn, top_q, bs_gpu, alpha, min_q=5, seed=1):
 class FKR_EigenPro(nn.Module):
     '''Fast Kernel Regression using EigenPro iteration.'''
     def __init__(self, kernel_fn, centers, y_dim, device="cuda"):
-        '''
-        centers := x_train
-        '''
         super(FKR_EigenPro, self).__init__()
         self.kernel_fn = kernel_fn
         self.n_centers, self.x_dim = centers.shape
@@ -111,16 +103,12 @@ class FKR_EigenPro(nn.Module):
         return tensor
 
     def kernel_matrix(self, samples):
-        return self.kernel_fn(samples, self.centers) #samples: torch.Size([1758, 3072]), centers: torch.Size([49000, 3072])
+        return self.kernel_fn(samples, self.centers)
 
     def forward(self, samples, weight=None):
         if weight is None:
-            weight = self.weight # torch.Size([49000, 10])
-        kmat = self.kernel_matrix(samples) # kmat:torch.Size([1758, 49000]); samples:torch.Size([1758, 3072])
-        
-        weight = weight.double()
-        kmat = kmat.double()
-        
+            weight = self.weight
+        kmat = self.kernel_matrix(samples)
         pred = kmat.mm(weight)
         return pred
 
@@ -144,7 +132,6 @@ class FKR_EigenPro(nn.Module):
                          eta, sample_ids, batch_ids):
         # update random coordiate block (for mini-batch)
         grad = self.primal_gradient(x_batch, y_batch, self.weight)
-        self.weight = self.weight.double()
         self.weight.index_add_(0, batch_ids, -eta * grad)
 
         # update fixed coordinate block (for EigenPro)
@@ -159,8 +146,8 @@ class FKR_EigenPro(nn.Module):
         n_sample, _ = x_eval.shape
         n_batch = n_sample / min(n_sample, bs)
         for batch_ids in np.array_split(range(n_sample), n_batch):
-            x_batch = self.tensor(x_eval[batch_ids]) #x_batch:torch.Size([2500, 3072])
-            p_batch = self.forward(x_batch).cpu().data.numpy() # p_batch:(2500, 10)
+            x_batch = self.tensor(x_eval[batch_ids])
+            p_batch = self.forward(x_batch).cpu().data.numpy()
             p_list.append(p_batch)
         p_eval = np.vstack(p_list)
 
@@ -221,7 +208,6 @@ class FKR_EigenPro(nn.Module):
         train_sec = 0  # training time in seconds
 
         for epoch in epochs:
-            print("Begin training")
             start = time.time()
             for _ in range(epoch - initial_epoch):
                 epoch_ids = np.random.choice(

@@ -21,8 +21,9 @@ def nystrom_kernel_svd(samples, kernel_fn, top_q):
     n_sample, _ = samples.shape
     kmat = kernel_fn(samples, samples).cpu().data.numpy()
     scaled_kmat = kmat / n_sample
-    vals, vecs = linalg.eigh(scaled_kmat,
-                             eigvals=(n_sample - top_q, n_sample - 1))
+
+    vals, vecs = linalg.eigh(scaled_kmat, #shape: (2000, 2000)
+                             eigvals=(n_sample - top_q, n_sample - 1)) #value: (1000, 1999)
     eigvals = vals[::-1][:top_q]
     eigvecs = vecs[:, ::-1][:, :top_q] / np.sqrt(n_sample)
     beta = np.diag(kmat).max()

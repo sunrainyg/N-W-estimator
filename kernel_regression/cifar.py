@@ -4,7 +4,10 @@ import numpy as np
 import math
 from six.moves import cPickle as pickle
 from sklearn.decomposition import PCA
+import imgaug.augmenters as iaa
+import torch
 import os
+import cv2
 import pdb
 import platform
 
@@ -91,18 +94,39 @@ def load_10classes(cifar10_dir, num_training=50000, num_validation=0, num_test=1
     mask = range(num_test)
     X_test = X_test[mask]
     y_test = y_test[mask]
+    
+    ## data augmentation
+    X_train_img = np.reshape(X_train,(50000,3,32,32))
+    X_train_img = X_train_img.transpose(0, 2, 3, 1)
+    img         = X_train_img[100]
+    img         = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
+    cv2.imwrite("123.jpg", img)
+
+    augmenter = iaa.Sequential([
+        iaa.Fliplr(0.5),          # 50%的概率进行水平翻转
+        iaa.Affine(rotate=(-10, 10)),  # 在 -10 到 10 度之间随机旋转图像
+    ])
+
+    train_M_x   = augmenter(images=X_train_img)
+    img         = train_M_x[100]
+    img         = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
+    cv2.imwrite("123_aug.jpg", img)
+    train_M_x = np.reshape(train_M_x, (50000,3072))
+
 
     x_train = X_train.astype('float32')
     x_test = X_test.astype('float32')
+    # train_M_x = train_M_x.astype('float32')
 
     x_train /= 255.0
     x_test /= 255.0
+    # train_M_x /= 255.0
 
     y_train = to_categorical(y_train, n_class) # label -> one hot
     y_test = to_categorical(y_test, n_class)
 
     # return x_train, y_train, X_val, y_val, x_test, y_test
-    return (x_train, y_train), (x_test, y_test)
+    return (x_train, y_train), (x_test, y_test), (train_M_x, y_train)
 
 def load_2classes(cifar10_dir, num_training=49000, num_validation=1000, num_test=10000):
     n_class = 4

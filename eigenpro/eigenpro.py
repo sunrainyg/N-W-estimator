@@ -5,7 +5,9 @@ import torch
 
 import torch.nn as nn
 import numpy as np
-
+import os, sys
+current_directory = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_directory)
 import svd
 import utils
 
@@ -152,12 +154,12 @@ class FKR_EigenPro(nn.Module):
         p_eval = np.vstack(p_list)
 
         eval_metrics = collections.OrderedDict()
-        if 'mse' in metrics:
-            eval_metrics['mse'] = np.mean(np.square(p_eval - y_eval))
-        if 'multiclass-acc' in metrics:
-            y_class = np.argmax(y_eval, axis=-1)
-            p_class = np.argmax(p_eval, axis=-1)
-            eval_metrics['multiclass-acc'] = np.mean(y_class == p_class)
+        # if 'mse' in metrics:
+        #     eval_metrics['mse'] = np.mean(np.square(p_eval - y_eval))
+        # if 'multiclass-acc' in metrics:
+        #     y_class = np.argmax(y_eval, axis=-1)
+        #     p_class = np.argmax(p_eval, axis=-1)
+        #     eval_metrics['multiclass-acc'] = np.mean(y_class == p_class)
 
         return eval_metrics
 
@@ -220,17 +222,17 @@ class FKR_EigenPro(nn.Module):
                                           eta, sample_ids, batch_ids)
                     del x_batch, y_batch, batch_ids
 
-            if run_epoch_eval:
-                train_sec += time.time() - start
-                tr_score = self.evaluate(x_train_eval, y_train_eval, bs)
-                tv_score = self.evaluate(x_val, y_val, bs)
-                print("train error: %.2f%%\tval error: %.2f%% (%d epochs, %.2f seconds)\t"
-                      "train l2: %.2e\tval l2: %.2e" %
-                      ((1 - tr_score['multiclass-acc']) * 100,
-                      (1 - tv_score['multiclass-acc']) * 100,
-                      epoch, train_sec, tr_score['mse'], tv_score['mse']))
-                res[epoch] = (tr_score, tv_score, train_sec)
+            # if run_epoch_eval:
+            #     train_sec += time.time() - start
+            #     tr_score = self.evaluate(x_train_eval, y_train_eval, bs)
+            #     tv_score = self.evaluate(x_val, y_val, bs)
+            #     print("train error: %.2f%%\tval error: %.2f%% (%d epochs, %.2f seconds)\t"
+            #           "train l2: %.2e\tval l2: %.2e" %
+            #           ((1 - tr_score['multiclass-acc']) * 100,
+            #           (1 - tv_score['multiclass-acc']) * 100,
+            #           epoch, train_sec, tr_score['mse'], tv_score['mse']))
+            #     res[epoch] = (tr_score, tv_score, train_sec)
 
             initial_epoch = epoch
-
+        
         return res

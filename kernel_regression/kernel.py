@@ -17,6 +17,7 @@ def euclidean_distances(samples, centers, squared=True):
     Returns:
         pointwise distances (n_sample, n_center).
     '''
+    pdb.set_trace()
     samples_norm = np.sum(samples**2, axis=1) # center: torch.Size([49000, 3072]); samples: torch.Size([1758, 3072])
     if samples is centers:
         centers_norm = samples_norm

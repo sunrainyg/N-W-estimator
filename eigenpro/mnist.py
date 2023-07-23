@@ -62,7 +62,7 @@ def load():
     
     # (x_train, y_train), (x_test, y_test) = load_data()
     
-    path = '/lustre/grp/gyqlab/lism/brt/language-vision-interface/N-W-estimator/dataset/mnist.npz'
+    path = './data/mnist.npz'
     f = np.load(path)
     x_train, y_train = f['x_train'], f['y_train'] # y_train:(60000,)
     x_test, y_test = f['x_test'], f['y_test'] # y_test:(60000,)

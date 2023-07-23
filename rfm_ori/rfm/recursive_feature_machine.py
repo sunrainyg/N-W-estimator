@@ -35,7 +35,7 @@ class RecursiveFeatureMachine(torch.nn.Module):
 
     def fit_predictor(self, centers, targets, **kwargs):
         '''
-        input: center  - x_train 
+        input: center  - X_train 
                targets - y_train
         self.M - create a unit matrix
         self.weight - alpha
@@ -158,7 +158,7 @@ class LaplaceRFM(RecursiveFeatureMachine):
         
     def update_M(self, samples):
         '''
-        Input:  samples - Training set
+        Input:  samples - X_train; same as centers
                 self.weights - alpha
                 
         Notion: K := K_M(X,X) / ||x-z||_M

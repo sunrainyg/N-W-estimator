@@ -1,2 +1,5 @@
 pip install git+https://github.com/aradha/recursive_feature_machines.git@pip_install
-pip install git+https://github.com/EigenPro/EigenPro3.git
+pip install scipy
+pip install six
+pip install scikit-learn
+pip install imgaug

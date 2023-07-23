@@ -5,7 +5,9 @@ import math
 from six.moves import cPickle as pickle
 from sklearn.decomposition import PCA
 import imgaug.augmenters as iaa
+import torchvision.transforms as transforms
 import torch
+import torchvision
 import os
 import cv2
 import pdb
@@ -13,6 +15,41 @@ import platform
 
 classes = ('plane', 'car', 'bird', 'cat',
            'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+
+import torch
+
+def to_categorical_tensor(y, num_classes=None, dtype=torch.float32):
+    """Converts a class vector (integers) to binary class matrix.
+
+    E.g. for use with categorical_crossentropy.
+
+    # Arguments
+        y: class vector to be converted into a matrix
+            (integers from 0 to num_classes).
+        num_classes: total number of classes.
+        dtype: The data type expected by the input, as a PyTorch dtype
+            (e.g., torch.float32, torch.float64, torch.int32, ...).
+
+    # Returns
+        A binary matrix representation of the input. The classes axis
+        is placed last.
+    """
+    y = torch.tensor(y, dtype=torch.int32)
+    input_shape = y.shape
+    if input_shape and input_shape[-1] == 1 and len(input_shape) > 1:
+        input_shape = tuple(input_shape[:-1])
+    y = y.view(-1)
+    if not num_classes:
+        num_classes = torch.max(y) + 1
+    n = y.shape[0]
+    categorical = torch.zeros((n, num_classes), dtype=dtype)
+
+    categorical[torch.arange(n), y] = 1
+    output_shape = input_shape + (num_classes,)
+    categorical = categorical.view(output_shape)
+    return categorical
+
+
 
 def to_categorical(y, num_classes=None, dtype='float32'):
     """Converts a class vector (integers) to binary class matrix.
@@ -79,54 +116,34 @@ def load_CIFAR10(ROOT):
     Xte, Yte = load_CIFAR_batch(os.path.join(ROOT, 'test_batch'))
     return Xtr, Ytr, Xte, Yte
     
-def load_10classes(cifar10_dir, num_training=50000, num_validation=0, num_test=10000):
-    n_class = 10
-    # Load the raw CIFAR-10 data
-    X_train, y_train, X_test, y_test = load_CIFAR10(cifar10_dir)
-
-    # Subsample the data
-    mask = range(num_training, num_training + num_validation)
-    X_val = X_train[mask]
-    y_val = y_train[mask]
-    mask = range(num_training)
-    X_train = X_train[mask]
-    y_train = y_train[mask]
-    mask = range(num_test)
-    X_test = X_test[mask]
-    y_test = y_test[mask]
+def load_10classes(cifar10_dir):
     
-    ## data augmentation
-    X_train_img = np.reshape(X_train,(50000,3,32,32))
-    X_train_img = X_train_img.transpose(0, 2, 3, 1)
-    img         = X_train_img[100]
-    img         = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
-    cv2.imwrite("123.jpg", img)
-
-    augmenter = iaa.Sequential([
-        iaa.Fliplr(0.5),          # 50%的概率进行水平翻转
-        iaa.Affine(rotate=(-10, 10)),  # 在 -10 到 10 度之间随机旋转图像
-    ])
-
-    train_M_x   = augmenter(images=X_train_img)
-    img         = train_M_x[100]
-    img         = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
-    cv2.imwrite("123_aug.jpg", img)
-    train_M_x = np.reshape(train_M_x, (50000,3072))
-
-
-    x_train = X_train.astype('float32')
-    x_test = X_test.astype('float32')
-    # train_M_x = train_M_x.astype('float32')
-
-    x_train /= 255.0
-    x_test /= 255.0
-    # train_M_x /= 255.0
-
-    y_train = to_categorical(y_train, n_class) # label -> one hot
-    y_test = to_categorical(y_test, n_class)
-
-    # return x_train, y_train, X_val, y_val, x_test, y_test
-    return (x_train, y_train), (x_test, y_test), (train_M_x, y_train)
+    n_class = 10
+    
+    transform = transforms.Compose(
+                    [transforms.ToTensor(),
+                    transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))])
+    
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                        download=True, transform=transform)
+    testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                        download=True, transform=transform)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=50000,
+                                          shuffle=False, num_workers=2)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=10000,
+                                          shuffle=False, num_workers=2)
+    
+    for step, (train_batch_x, train_batch_y) in enumerate(trainloader):
+        x_train = train_batch_x.view(50000, -1)
+        y_train = train_batch_y
+        y_train = to_categorical(y_train, n_class) # label -> one hot
+        
+    for step, (test_batch_x, test_batch_y) in enumerate(testloader):
+        x_test = test_batch_x.view(10000, -1)
+        y_test = test_batch_y
+        y_test = to_categorical(y_test, n_class) # label -> one hot
+    
+    return (x_train, y_train), (x_test, y_test)
 
 def load_2classes(cifar10_dir, num_training=49000, num_validation=1000, num_test=10000):
     n_class = 4

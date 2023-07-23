@@ -285,7 +285,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         """
         # K_test          = pairwise_kernels(self.x_train, x_test, metric=self.kernel, gamma=self.gamma) # K.shape (49000, 10000)
         
-        epochs = 10
+        epochs = 8
         for epoch in range(epochs):
             alpha       = self.fit_predictor_lstsq(self.x_train, self.y_train)
             self.M      = self.update_M(self.train_M_x, alpha)
@@ -317,21 +317,19 @@ if __name__ == "__main__":
     ##### cifar
     n_class = 10
     cifar10_dir = './data/cifar-10-batches-py'
-    (x_train, y_train), (x_test, y_test), (train_M_x, y_train) = cifar.load_10classes(cifar10_dir)
-    x_train, y_train, x_test, y_test = x_train.astype('float32'), \
-    y_train.astype('float32'), x_test.astype('float32'), y_test.astype('float32')
+    (x_train, y_train), (x_test, y_test) = cifar.load_10classes(cifar10_dir)
     
     x_train = torch.tensor(x_train).to("cuda")
     y_train = torch.tensor(y_train).to("cuda")
     x_test  = torch.tensor(x_test).to("cuda")
     y_test  = torch.tensor(y_test).to("cuda")
-    train_M_x  = torch.tensor(train_M_x).to("cuda")
+    # train_M_x  = torch.tensor(train_M_x).to("cuda")
             
     x_train = x_train.clone().detach().to(torch.float32)
     y_train = y_train.clone().detach().to(torch.float32)
     x_test  = x_test.clone().detach().to(torch.float32)
     y_test  = y_test.clone().detach().to(torch.float32)
-    train_M_x = train_M_x.clone().detach().to(torch.float32)
+    # train_M_x = train_M_x.clone().detach().to(torch.float32)
     # Fit regression models
     
     x_train_part1 = x_train[0:10000]
@@ -346,27 +344,27 @@ if __name__ == "__main__":
     y_train_part4 = y_train[30000:40000]
     y_train_part5 = y_train[40000:50000]
     
-    train_M_x_part = train_M_x[0:10000]
+    # train_M_x_part = train_M_x[0:10000]
     
     t0 = time.time()
-    kr = KernelRegression(kernel="rbf", gamma=0.5)
+    kr = KernelRegression(kernel="rbf", gamma=0.4)
     #### 1 layer:
-    y_kr = kr.fit(x_train_part1, y_train_part1, train_M_x).forward(x_test, y_test) # 1 layer
+    y_kr = kr.fit(x_train_part1, y_train_part1, x_train_part1).forward(x_test, y_test) # 1 layer
     
     # #### 2 layer:
     # ## train
-    # expectation      = kr.fit(x_train_part1, y_train_part1).forward(x_train_part2, y_train_part2)
+    # expectation      = kr.fit(x_train_part1, y_train_part1, x_train_part1).forward(x_train_part2, y_train_part2)
     # error_gt         = y_train_part2 - expectation #每一层存x, y
     
-    # ## inference
-    # expectation_inf  = kr.fit(x_train_part1, y_train_part1).forward(x_test, y_test)
-    # error_est        = kr.fit(x_train_part2, error_gt).forward(x_test, y_test)
+    # # ## inference
+    # expectation_inf  = kr.fit(x_train_part1, y_train_part1, x_train_part1).forward(x_test, y_test)
+    # error_est        = kr.fit(x_train_part2, error_gt, x_train_part2).forward(x_test, y_test)
     # result           = expectation_inf + error_est
     
     # eval_metrics = {}
-    # y_class = np.argmax(y_test, axis=-1)
-    # p_class = np.argmax(result, axis=-1)
-    # eval_metrics['multiclass-acc'] = np.mean(y_class == p_class)
+    # y_class =  torch.argmax(y_test, dim=-1)
+    # p_class =  torch.argmax(result, dim=-1)
+    # eval_metrics['multiclass-acc'] = torch.sum(y_class == p_class).item() / len(y_class)
     # print(eval_metrics)
     
     # #### 3 layer:
@@ -390,25 +388,25 @@ if __name__ == "__main__":
     
     # #### 5 layer:
     # ## train
-    # expectation      = kr.fit(x_train_part1, y_train_part1).forward(x_train_part2, y_train_part2)
+    # expectation      = kr.fit(x_train_part1, y_train_part1, x_train_part1).forward(x_train_part2, y_train_part2)
     # error_gt2        = y_train_part2 - expectation #每一层存x, y
     
-    # error_est2       = kr.fit(x_train_part2, error_gt2).forward(x_train_part3, y_train_part3)
+    # error_est2       = kr.fit(x_train_part2, error_gt2, x_train_part2).forward(x_train_part3, y_train_part3)
     # error_gt3        = y_train_part3 - error_est2 - expectation
     
-    # error_est3       = kr.fit(x_train_part3, error_gt3).forward(x_train_part4, y_train_part4)
+    # error_est3       = kr.fit(x_train_part3, error_gt3, x_train_part3).forward(x_train_part4, y_train_part4)
     # error_gt4        = y_train_part4 - error_est3 - error_est2 - expectation
     
-    # error_est4       = kr.fit(x_train_part4, error_gt4).forward(x_train_part5, y_train_part5)
+    # error_est4       = kr.fit(x_train_part4, error_gt4, x_train_part4).forward(x_train_part5, y_train_part5)
     # error_gt5        = y_train_part5 - error_est4 - error_est3 - error_est2 - expectation
     
     
     # ## inference
-    # expectation_inf  = kr.fit(x_train_part1, y_train_part1).forward(x_test, y_test) #layer1
-    # error_est1       = kr.fit(x_train_part2, error_gt2).forward(x_test, y_test) #layer2
-    # error_est2       = kr.fit(x_train_part3, error_gt3).forward(x_test, y_test) #layer3
-    # error_est3       = kr.fit(x_train_part4, error_gt4).forward(x_test, y_test) #layer4
-    # error_est4       = kr.fit(x_train_part5, error_gt5).forward(x_test, y_test) #layer4
+    # expectation_inf  = kr.fit(x_train_part1, y_train_part1, x_train_part1).forward(x_test, y_test) #layer1
+    # error_est1       = kr.fit(x_train_part2, error_gt2, x_train_part2).forward(x_test, y_test) #layer2
+    # error_est2       = kr.fit(x_train_part3, error_gt3, x_train_part3).forward(x_test, y_test) #layer3
+    # error_est3       = kr.fit(x_train_part4, error_gt4, x_train_part4).forward(x_test, y_test) #layer4
+    # error_est4       = kr.fit(x_train_part5, error_gt5, x_train_part5).forward(x_test, y_test) #layer4
     
     # result5           = expectation_inf + error_est1 + error_est2 + error_est3 + error_est4
     # result4           = expectation_inf + error_est1 + error_est2 + error_est3

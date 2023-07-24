@@ -100,15 +100,17 @@ class RecursiveFeatureMachine(torch.nn.Module):
         
         if loader:
             print("Loaders provided")
-            X_train, y_train = self.get_data(train_loader)
+            X_train, y_train = self.get_data(train_loader) #y_train: torch.Size([20000, 10])
             X_test, y_test = self.get_data(test_loader)
+            print("y_test.shape", y_test.shape)
             print("Dataset shape: x_train - {}, y_train - {}, x_test - {}, y_test - {}".format(X_train.shape, y_train.shape, X_test.shape, y_test.shape))
             
         else:
             X_train, y_train = train_loader
             X_test, y_test = test_loader
             print("Dataset shape: x_train - {}, y_train - {}, x_test - {}, y_test - {}".format(X_train.shape, y_train.shape, X_test.shape, y_test.shape))
-            
+        
+        
         for i in range(iters):
             ## initiate self.M and calculate self.weight
             self.fit_predictor(X_train, y_train)
@@ -140,11 +142,10 @@ class RecursiveFeatureMachine(torch.nn.Module):
         '''
         Function: calculate the score
         '''
-        
         ##
-        preds = self.predict(samples)
+        preds = self.predict(samples)  #preds: torch.Size([20000, 10]); sampels: torch.Size([20000, 3072])
         if metric=='accuracy':
-            return (1.*(targets.argmax(-1) == preds.argmax(-1))).mean()*100.
+            return (1.*(targets.argmax(-1) == preds.argmax(-1))).mean()*100.# targets: torch.Size([20000, 10])
         elif metric=='mse':
             return (targets - preds).pow(2).mean()
 
@@ -241,7 +242,7 @@ if __name__ == "__main__":
 
     y_train = fstar(X_train).double()
     y_test = fstar(X_test).double()
-
+    import pdb; pdb.set_trace()
     model = LaplaceRFM(bandwidth=1., diag=False, centering=False)
     model.fit(
         (X_train, y_train), 

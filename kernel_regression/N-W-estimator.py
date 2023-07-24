@@ -285,7 +285,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         """
         # K_test          = pairwise_kernels(self.x_train, x_test, metric=self.kernel, gamma=self.gamma) # K.shape (49000, 10000)
         
-        epochs = 8
+        epochs = 3
         for epoch in range(epochs):
             alpha       = self.fit_predictor_lstsq(self.x_train, self.y_train)
             self.M      = self.update_M(self.train_M_x, alpha)

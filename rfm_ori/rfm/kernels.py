@@ -81,7 +81,6 @@ def laplacian(samples, centers, bandwidth):
     return kernel_mat
 
 
-
 def laplacian_M(samples, centers, M, bandwidth):
     '''
     Equation: exp(\gamma * (x-xi)M(x-xi)^T)
@@ -94,8 +93,6 @@ def laplacian_M(samples, centers, M, bandwidth):
     kernel_mat.mul_(-gamma) # point-wise multiply
     kernel_mat.exp_() #point-wise exp
     return kernel_mat
-
-
 
 def laplacian_M_grad1(samples, centers, M, bandwidth):
     assert bandwidth > 0

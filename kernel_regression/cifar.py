@@ -120,17 +120,26 @@ def load_10classes(cifar10_dir):
     
     n_class = 10
     
-    transform = transforms.Compose(
-                    [transforms.ToTensor(),
-                    transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))])
+    transform       = transforms.Compose(
+                        [transforms.ToTensor(),
+                        transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))])
     
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+    transform_ma    = transforms.Compose(
+                        [transforms.RandomHorizontalFlip(),       # 50%的概率进行水平翻转
+                        transforms.ToTensor(),
+                        transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))])
+    
+    trainset        = torchvision.datasets.CIFAR10(root='./data', train=True,
                                         download=True, transform=transform)
-    testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+    testset         = torchvision.datasets.CIFAR10(root='./data', train=False,
                                         download=True, transform=transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=50000,
+    trainset4ma     = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                        download=True, transform=transform_ma)
+    trainloader     = torch.utils.data.DataLoader(trainset, batch_size=50000,
                                           shuffle=False, num_workers=2)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=10000,
+    testloader      = torch.utils.data.DataLoader(testset, batch_size=10000,
+                                          shuffle=False, num_workers=2)
+    trainloader4ma  = torch.utils.data.DataLoader(trainset4ma, batch_size=50000,
                                           shuffle=False, num_workers=2)
     
     for step, (train_batch_x, train_batch_y) in enumerate(trainloader):
@@ -138,12 +147,18 @@ def load_10classes(cifar10_dir):
         y_train = train_batch_y
         y_train = to_categorical(y_train, n_class) # label -> one hot
         
+    for step, (train_batch_x4ma, train_batch_y4ma) in enumerate(trainloader4ma):
+        x_train4ma = train_batch_x4ma.view(50000, -1)
+        y_train4ma = train_batch_y4ma
+        y_train4ma = to_categorical(y_train4ma, n_class) # label -> one hot
+        
     for step, (test_batch_x, test_batch_y) in enumerate(testloader):
         x_test = test_batch_x.view(10000, -1)
         y_test = test_batch_y
         y_test = to_categorical(y_test, n_class) # label -> one hot
     
-    return (x_train, y_train), (x_test, y_test)
+    
+    return (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma)
 
 def load_2classes(cifar10_dir, num_training=49000, num_validation=1000, num_test=10000):
     n_class = 4

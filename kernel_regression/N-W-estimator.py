@@ -225,7 +225,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         p, d = samples.shape
         p, c = weights.shape
         n, d = samples.shape
-        
+
         samples_term = (
                 K # (n, p)
                 @ weights # (p, c)
@@ -287,7 +287,8 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         
         epochs = 3
         for epoch in range(epochs):
-            alpha       = self.fit_predictor_lstsq(self.x_train, self.y_train)
+
+            alpha       = self.fit_predictor_lstsq(self.train_M_x, self.train_M_y)
             self.M      = self.update_M(self.train_M_x, alpha)
             print("One round finished")
 
@@ -317,19 +318,21 @@ if __name__ == "__main__":
     ##### cifar
     n_class = 10
     cifar10_dir = './data/cifar-10-batches-py'
-    (x_train, y_train), (x_test, y_test) = cifar.load_10classes(cifar10_dir)
+    (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma) = cifar.load_10classes(cifar10_dir)
     
     x_train = torch.tensor(x_train).to("cuda")
     y_train = torch.tensor(y_train).to("cuda")
     x_test  = torch.tensor(x_test).to("cuda")
     y_test  = torch.tensor(y_test).to("cuda")
-    # train_M_x  = torch.tensor(train_M_x).to("cuda")
+    x_train4ma  = torch.tensor(x_train4ma).to("cuda")
+    y_train4ma  = torch.tensor(y_train4ma).to("cuda")
             
     x_train = x_train.clone().detach().to(torch.float32)
     y_train = y_train.clone().detach().to(torch.float32)
     x_test  = x_test.clone().detach().to(torch.float32)
     y_test  = y_test.clone().detach().to(torch.float32)
-    # train_M_x = train_M_x.clone().detach().to(torch.float32)
+    x_train4ma = x_train4ma.clone().detach().to(torch.float32)
+    y_train4ma = y_train4ma.clone().detach().to(torch.float32)
     # Fit regression models
     
     x_train_part1 = x_train[0:10000]
@@ -344,12 +347,14 @@ if __name__ == "__main__":
     y_train_part4 = y_train[30000:40000]
     y_train_part5 = y_train[40000:50000]
     
-    # train_M_x_part = train_M_x[0:10000]
+    x_train4ma_part = x_train4ma[0:15000]
+    y_train4ma_part = y_train4ma[0:15000]
+    
     
     t0 = time.time()
     kr = KernelRegression(kernel="rbf", gamma=0.4)
     #### 1 layer:
-    y_kr = kr.fit(x_train_part1, y_train_part1, x_train_part1).forward(x_test, y_test) # 1 layer
+    y_kr = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_test, y_test) # 1 layer
     
     # #### 2 layer:
     # ## train

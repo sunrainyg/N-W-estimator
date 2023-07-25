@@ -4,7 +4,6 @@ import numpy as np
 import math
 from six.moves import cPickle as pickle
 from sklearn.decomposition import PCA
-import imgaug.augmenters as iaa
 import torchvision.transforms as transforms
 import torch
 import torchvision
@@ -126,8 +125,11 @@ def load_10classes(cifar10_dir):
     
     transform_ma    = transforms.Compose(
                         [transforms.RandomHorizontalFlip(),       # 50%的概率进行水平翻转
-                        transforms.ToTensor(),
-                        transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))])
+                        #  transforms.RandomVerticalFlip(),
+                        #  transforms.RandomRotation(30),
+                         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+                         transforms.ToTensor(),
+                         transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))])
     
     trainset        = torchvision.datasets.CIFAR10(root='./data', train=True,
                                         download=True, transform=transform)
@@ -135,21 +137,29 @@ def load_10classes(cifar10_dir):
                                         download=True, transform=transform)
     trainset4ma     = torchvision.datasets.CIFAR10(root='./data', train=True,
                                         download=True, transform=transform_ma)
-    trainloader     = torch.utils.data.DataLoader(trainset, batch_size=50000,
+    trainloader     = torch.utils.data.DataLoader(trainset, batch_size=45000,
                                           shuffle=False, num_workers=2)
     testloader      = torch.utils.data.DataLoader(testset, batch_size=10000,
                                           shuffle=False, num_workers=2)
-    trainloader4ma  = torch.utils.data.DataLoader(trainset4ma, batch_size=50000,
+    trainloader4ma  = torch.utils.data.DataLoader(trainset4ma, batch_size=45000,
                                           shuffle=False, num_workers=2)
     
     for step, (train_batch_x, train_batch_y) in enumerate(trainloader):
-        x_train = train_batch_x.view(50000, -1)
-        y_train = train_batch_y
-        y_train = to_categorical(y_train, n_class) # label -> one hot
+        if step == 1:
+            break
+        x_train     = train_batch_x.view(45000, -1)
+        y_train_ori = train_batch_y
+        y_train     = to_categorical(y_train_ori, n_class) # label -> one hot
         
     for step, (train_batch_x4ma, train_batch_y4ma) in enumerate(trainloader4ma):
-        x_train4ma = train_batch_x4ma.view(50000, -1)
+        if step == 1:
+            break
+        x_train4ma = train_batch_x4ma.view(45000, -1)
+        ### combine data
+        x_train4ma = torch.cat((x_train, x_train4ma), dim=0)
+        
         y_train4ma = train_batch_y4ma
+        y_train4ma = torch.cat((y_train_ori, y_train4ma), dim=0)
         y_train4ma = to_categorical(y_train4ma, n_class) # label -> one hot
         
     for step, (test_batch_x, test_batch_y) in enumerate(testloader):

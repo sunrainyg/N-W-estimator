@@ -1,5 +1,2 @@
 pip install git+https://github.com/aradha/recursive_feature_machines.git@pip_install
-pip install scipy
-pip install six
-pip install scikit-learn
-pip install imgaug
+pip install scipy,six,scikit-learn,opencv-python

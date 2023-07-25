@@ -14,6 +14,9 @@ import cifar
 import mnist
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.base import BaseEstimator, RegressorMixin
+import os
+# torch.backends.cuda.preferred_linalg_library("cusolver")
+
 
 
 class KernelRegression(BaseEstimator, RegressorMixin):
@@ -76,11 +79,12 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         """
         
         M = torch.eye(x_train.shape[-1])
-        self.M = M.cuda()
+        self.M = M.to('cuda')
         print("init self.M shape:", self.M.shape)
             
             
         self.kernel         = lambda x, z: self.laplacian_M(x, z, self.M, self.gamma)
+        self.kernel_cpu     = lambda x, z: self.laplacian_M(x, z, self.M.cpu(), self.gamma)
         self.x_train        = x_train
         self.y_train        = y_train
         self.train_M_x      = train_M_x
@@ -129,7 +133,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
             distances.clamp_(min=0).sqrt_()
 
         return distances
-    
+
     def euclidean_distances(self, samples, centers, squared=False):
     
         samples_norm2 = np.sum(samples**2, axis=-1)
@@ -169,7 +173,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         kernel_mat.mul_(-gamma) # point-wise multiply
         kernel_mat.exp_() #point-wise exp
         return kernel_mat
-    
+ 
     def laplacian(self, samples, centers, bandwidth):
         '''Laplacian kernel.
 
@@ -214,7 +218,8 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         where x is samples, z is center,
         
         '''
-
+        samples        = torch.tensor(samples).to('cuda')
+        
         K = self.kernel(samples, samples) # K_M(X, X)
         dist = self.euclidean_distances_M(samples, samples, self.M, squared=False) # Ma distance
         dist = torch.where(dist < 1e-10, torch.zeros(1, device=dist.device).float(), dist) # Set those small values to 0 to avoid errors caused by dividing by too small a number.
@@ -247,17 +252,48 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         
         return self.M
 
-    def fit_predictor_lstsq(self, centers, targets):
+    # def fit_predictor_lstsq(self, centers, targets):
+    #     '''
+    #     Function: solve the alpha
+    #     Equation: alpha * K(X,X) = Y
+    #     Return: alpha
+    #     '''
+    #     pdb.set_trace()
+    #     return torch.linalg.solve(
+    #         self.kernel(centers, centers) 
+    #         + self.reg*torch.eye(len(centers), device=centers.device), 
+    #         targets
+    #     )
+    
+    def fit_predictor_lstsq(self, centers, targets, batch_size=10000):
         '''
         Function: solve the alpha
         Equation: alpha * K(X,X) = Y
         Return: alpha
         '''
-        return torch.linalg.solve(
-            self.kernel(centers, centers) 
-            + self.reg*torch.eye(len(centers), device=centers.device), 
-            targets
-        )
+        itera           = centers.shape[0] / batch_size
+
+        # 使用torch.chunk函数将data分成5份，每份大小为10000
+        center_batches  = torch.split(centers, batch_size, dim=0)
+        targets_batches = torch.split(targets, batch_size, dim=0)
+
+        # center_batches是一个包含五个张量的列表，每个张量的形状为（10000，3072）
+        # data_batches[0]包含前10000行，data_batches[1]包含接下来的10000行，以此类推
+        alpha_batch_list = []
+        for i in range(int(itera)):
+            center_bat        = torch.tensor(center_batches[i]).to('cuda')
+            targets_bat       = torch.tensor(targets_batches[i]).to('cuda')
+            alpha_batch_i     = torch.linalg.solve(
+                                self.kernel(center_bat, center_bat) 
+                                + self.reg*torch.eye(len(center_bat), device=center_bat.device), 
+                                targets_bat)
+            alpha_batch_list.append(alpha_batch_i)
+            del center_bat, targets_bat
+
+        alpha = torch.cat(alpha_batch_list, dim=0)
+        
+        return alpha
+
     
     def fit_predictor_eigenpro(self, x_train, y_train, x_test, y_test):
         n_class = 10
@@ -285,17 +321,17 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         """
         # K_test          = pairwise_kernels(self.x_train, x_test, metric=self.kernel, gamma=self.gamma) # K.shape (49000, 10000)
         
-        epochs = 3
+        epochs = 8
+        batch_size = 10000
         for epoch in range(epochs):
-
-            alpha       = self.fit_predictor_lstsq(self.train_M_x, self.train_M_y)
-            self.M      = self.update_M(self.train_M_x, alpha)
+            
+            alpha           = self.fit_predictor_lstsq(self.train_M_x, self.train_M_y) #alpha.shape: torch.Size([30000, 10])
+            self.M          = self.update_M(self.train_M_x, alpha)
             print("One round finished")
 
-        K_test          = self.kernel(self.x_train, x_test)
+        K_test          = self.kernel_cpu(self.x_train, x_test)
         normalized_K    = self.normalize_rows(K_test.T) # normalized_K.shape: (10000, 50000)
         output          = self.matrix_multiplication_sum(normalized_K, self.y_train)
-        # output = np.matmul(normalized_K, self.y_train)
         
         eval_metrics = {}
         
@@ -320,19 +356,19 @@ if __name__ == "__main__":
     cifar10_dir = './data/cifar-10-batches-py'
     (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma) = cifar.load_10classes(cifar10_dir)
     
-    x_train = torch.tensor(x_train).to("cuda")
-    y_train = torch.tensor(y_train).to("cuda")
-    x_test  = torch.tensor(x_test).to("cuda")
-    y_test  = torch.tensor(y_test).to("cuda")
-    x_train4ma  = torch.tensor(x_train4ma).to("cuda")
-    y_train4ma  = torch.tensor(y_train4ma).to("cuda")
+    x_train = torch.tensor(x_train).to("cpu")
+    y_train = torch.tensor(y_train).to("cpu")
+    x_test  = torch.tensor(x_test).to("cpu")
+    y_test  = torch.tensor(y_test).to("cpu")
+    x_train4ma  = torch.tensor(x_train4ma).to('cpu')
+    y_train4ma  = torch.tensor(y_train4ma).to('cpu')
             
-    x_train = x_train.clone().detach().to(torch.float32)
-    y_train = y_train.clone().detach().to(torch.float32)
-    x_test  = x_test.clone().detach().to(torch.float32)
-    y_test  = y_test.clone().detach().to(torch.float32)
-    x_train4ma = x_train4ma.clone().detach().to(torch.float32)
-    y_train4ma = y_train4ma.clone().detach().to(torch.float32)
+    x_train = x_train.detach().to(torch.float32)
+    y_train = y_train.detach().to(torch.float32)
+    x_test  = x_test.detach().to(torch.float32)
+    y_test  = y_test.detach().to(torch.float32)
+    x_train4ma = x_train4ma.detach().to(torch.float32)
+    y_train4ma = y_train4ma.detach().to(torch.float32)
     # Fit regression models
     
     x_train_part1 = x_train[0:10000]
@@ -347,12 +383,12 @@ if __name__ == "__main__":
     y_train_part4 = y_train[30000:40000]
     y_train_part5 = y_train[40000:50000]
     
-    x_train4ma_part = x_train4ma[0:15000]
-    y_train4ma_part = y_train4ma[0:15000]
+    x_train4ma_part = x_train4ma[0:60000]
+    y_train4ma_part = y_train4ma[0:60000]
     
     
     t0 = time.time()
-    kr = KernelRegression(kernel="rbf", gamma=0.4)
+    kr = KernelRegression(kernel="rbf", gamma=0.3)
     #### 1 layer:
     y_kr = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_test, y_test) # 1 layer
     

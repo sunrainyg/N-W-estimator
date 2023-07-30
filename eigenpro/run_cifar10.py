@@ -4,7 +4,7 @@ import torch
 import kernel
 import pdb
 import eigenpro
-
+pdb.set_trace()
 n_class = 10
 cifar10_dir = './data/cifar-10-batches-py'
 (x_train, y_train), (x_test, y_test) = cifar.load(cifar10_dir)

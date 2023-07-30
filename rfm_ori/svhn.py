@@ -35,15 +35,18 @@ transform = transforms.Compose([
 
 data_path = set_data_path() ## set this data path
 
-trainset0 = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                        download=True, transform=transform)
-testset0 = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                        download=True, transform=transform)
+trainset0 = torchvision.datasets.SVHN(root='./data',
+                                    split = "train",
+                                    transform=transform,
+                                    download=True)
+testset0 = torchvision.datasets.SVHN(root='./data',
+                                    split = "test",
+                                    transform=transform,
+                                    download=True)
 
 trainset = pre_process(trainset0,n_samples=20000, num_classes=10)
 train_loader = torch.utils.data.DataLoader(trainset, batch_size=128,
                                           shuffle=True, num_workers=2)
-
 
 testset = pre_process(testset0,n_samples=5000, num_classes=10)
 test_loader = torch.utils.data.DataLoader(testset, batch_size=128,
@@ -51,7 +54,7 @@ test_loader = torch.utils.data.DataLoader(testset, batch_size=128,
 
 X_train, y_train = get_data(train_loader) #y_train: torch.Size([20000, 10])
 X_test, y_test = get_data(test_loader)
-import pdb;pdb.set_trace()
+
 # run rfm
 rfm = LaplaceRFM(bandwidth=1.)
 M, _ = rfm.fit(train_loader, test_loader, iters=1, loader=True, classif=True)

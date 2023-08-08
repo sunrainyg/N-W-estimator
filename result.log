@@ -1,1 +1,1 @@
-Dataset	Size	NumFeatures	NumClasses	Validation Acc	Reg	Iter	Test Acc
+Dataset	Size	NumFeatures	NumClasses	Validation Acc	EpIter	Iter	Test Acc

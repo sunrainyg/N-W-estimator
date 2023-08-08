@@ -13,6 +13,7 @@ import kernel
 import cifar, mnist, svhn
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.base import BaseEstimator, RegressorMixin
+import matplotlib.pyplot as plt
 import os
 # torch.backends.cuda.preferred_linalg_library("cusolver")
 
@@ -117,20 +118,19 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         '''
         
         ## Obtain a vector containing the square norm value for each sample point.
-        samples_norm2 = ((samples @ M) * samples).sum(-1)
+        samples_norm2 = ((samples @ M) * samples).sum(-1) # torch.Size([10000])
 
         if samples is centers:
             centers_norm2 = samples_norm2
         else:
-            centers_norm2 = ((centers @ M) * centers).sum(-1)
+            centers_norm2 = ((centers @ M) * centers).sum(-1) # torch.Size([10000])
             
-        distances = -2 * (samples @ M) @ centers.T
+        distances = -2 * (samples @ M) @ centers.T # torch.Size([10000, 10000])
         distances.add_(samples_norm2.view(-1, 1))
         distances.add_(centers_norm2)
 
         if not squared:
             distances.clamp_(min=0).sqrt_()
-
         return distances
 
     def euclidean_distances(self, samples, centers, squared=False):
@@ -305,15 +305,15 @@ class KernelRegression(BaseEstimator, RegressorMixin):
             The predicted target value.
         """
         # K_test          = pairwise_kernels(self.x_train, x_test, metric=self.kernel, gamma=self.gamma) # K.shape (49000, 10000)
-        
-        if self.train_M_x is not None:
-            epochs = 8
-            batch_size = 10000
-            for epoch in range(epochs):
+
+        # if self.train_M_x is not None:
+        #     epochs = 5
+        #     batch_size = 10000
+        #     for epoch in range(epochs):
                 
-                alpha           = self.fit_predictor_lstsq(self.train_M_x, self.train_M_y) #alpha.shape: torch.Size([30000, 10])
-                self.M          = self.update_M(self.train_M_x, alpha)
-                print("One round finished")
+        #         alpha           = self.fit_predictor_lstsq(self.train_M_x, self.train_M_y) #alpha.shape: torch.Size([30000, 10])
+        #         self.M          = self.update_M(self.train_M_x, alpha)
+        #         print("One round finished")
 
         K_test          = self.kernel_cpu(self.x_train, x_test)
         normalized_K    = self.normalize_rows(K_test.T) # normalized_K.shape: (10000, 50000)
@@ -331,16 +331,44 @@ class KernelRegression(BaseEstimator, RegressorMixin):
     def forward(self, x_test, y_test):
         # block = self.block
         output = self.predict(x_test, y_test)
-        
-        return output
-    
+        return output, self.M
 
 if __name__ == "__main__":
     
-    # ##### cifar
+    def plot_M_img(M):
+        f, axarr = plt.subplots(1,2,figsize=(10, 3))
+        axarr[0].axes.xaxis.set_ticklabels([])
+        axarr[0].axes.yaxis.set_ticklabels([])
+        axarr[1].axes.xaxis.set_ticklabels([])
+        axarr[1].axes.yaxis.set_ticklabels([])
+
+        pcm = axarr[0].imshow(torch.mean(torch.diag(M.cpu()).reshape(3,32,32),axis=0),cmap='cividis')
+        axarr[0].set_title("M matrix diagonal")
+        f.colorbar(mappable=pcm, ax=axarr[0], shrink=0.8,location="left")
+        axarr[1].imshow(torch.moveaxis(trainset[18][0],0,2))
+        axarr[1].set_title("Sample Image")
+        plt.savefig("M_vis.jpg")
+        plt.close()
+    
+    def plot_M_img_mnisit(M):
+        f, axarr = plt.subplots(1,2,figsize=(10, 3))
+        axarr[0].axes.xaxis.set_ticklabels([])
+        axarr[0].axes.yaxis.set_ticklabels([])
+        axarr[1].axes.xaxis.set_ticklabels([])
+        axarr[1].axes.yaxis.set_ticklabels([])
+
+        pcm = axarr[0].imshow(torch.mean(torch.diag(M.cpu()).reshape(28,28).unsqueeze(0).expand(3, -1, -1),axis=0).detach().numpy(),cmap='cividis')
+        axarr[0].set_title("M matrix diagonal")
+        f.colorbar(mappable=pcm, ax=axarr[0], shrink=0.8,location="left")
+        axarr[1].imshow(torch.moveaxis(trainset[3][0],0,2))
+        axarr[1].set_title("Sample Image")
+        plt.savefig("M_vis_mnist.jpg")
+        plt.close()
+    
+    ##### cifar
     # n_class = 10
     # cifar10_dir = './data/cifar-10-batches-py'
-    # (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma) = cifar.load_10classes(cifar10_dir)
+    # (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma), trainset = cifar.load_10classes(cifar10_dir)
     # # (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma) = mnist.load_10classes(cifar10_dir)
     
     # x_train         = torch.tensor(x_train).to("cpu")
@@ -359,13 +387,13 @@ if __name__ == "__main__":
     # # Fit regression models
     
     # x_train_part1   = x_train[0:30000]
-    # x_train_part2   = x_train[10000:20000]
+    # x_train_part2   = x_train4ma[30000:50000]
     # x_train_part3   = x_train[20000:30000]
     # x_train_part4   = x_train[30000:40000]
     # x_train_part5   = x_train[40000:50000]
     
     # y_train_part1   = y_train[0:30000]
-    # y_train_part2   = y_train[10000:20000]
+    # y_train_part2   = y_train4ma[30000:50000]
     # y_train_part3   = y_train[20000:30000]
     # y_train_part4   = y_train[30000:40000]
     # y_train_part5   = y_train[40000:50000]
@@ -373,20 +401,19 @@ if __name__ == "__main__":
     # x_train4ma_part = x_train4ma[0:60000]
     # y_train4ma_part = y_train4ma[0:60000]
     
-    
     # t0 = time.time()
-    # kr = KernelRegression(kernel="rbf", gamma=0.3)
-    # #### 1 layer:
-    # y_kr = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_test, y_test) # 1 layer
-    
+    # kr = KernelRegression(kernel="rbf", gamma=0.4)
+    # # #### 1 layer:
+    # y_kr, M = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_test, y_test) # 1 layer
+    # plot_M_img(M)
     #### 2 layer:
     ## train
-    # expectation      = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_train_part2, y_train_part2)
+    # expectation, Maha      = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_train_part2, y_train_part2)
     # error_gt         = y_train_part2 - expectation #每一层存x, y
     
     # # ## inference
-    # expectation_inf  = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_test, y_test)
-    # error_est        = kr.fit(x_train_part2, error_gt, x_train4ma_part, y_train4ma_part).forward(x_test, y_test)
+    # expectation_inf, Maha  = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_test, y_test)
+    # error_est, Maha      = kr.fit(x_train_part2, error_gt, x_train4ma_part, y_train4ma_part).forward(x_test, y_test)
     # result           = expectation_inf + error_est
     
     # eval_metrics = {}
@@ -414,27 +441,27 @@ if __name__ == "__main__":
     # eval_metrics['multiclass-acc'] = np.mean(y_class == p_class)
     # print(eval_metrics)
     
-    # #### 5 layer:
-    # ## train
-    # expectation      = kr.fit(x_train_part1, y_train_part1, x_train_part1).forward(x_train_part2, y_train_part2)
+    #### 5 layer:
+    
+    # expectation, _      = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_train_part2, y_train_part2)
     # error_gt2        = y_train_part2 - expectation #每一层存x, y
     
-    # error_est2       = kr.fit(x_train_part2, error_gt2, x_train_part2).forward(x_train_part3, y_train_part3)
+    # error_est2, _        = kr.fit(x_train_part2, error_gt2, x_train4ma_part, y_train4ma_part).forward(x_train_part3, y_train_part3)
     # error_gt3        = y_train_part3 - error_est2 - expectation
     
-    # error_est3       = kr.fit(x_train_part3, error_gt3, x_train_part3).forward(x_train_part4, y_train_part4)
+    # error_est3, _        = kr.fit(x_train_part3, error_gt3, x_train4ma_part, y_train4ma_part).forward(x_train_part4, y_train_part4)
     # error_gt4        = y_train_part4 - error_est3 - error_est2 - expectation
     
-    # error_est4       = kr.fit(x_train_part4, error_gt4, x_train_part4).forward(x_train_part5, y_train_part5)
+    # error_est4, _        = kr.fit(x_train_part4, error_gt4, x_train4ma_part, y_train4ma_part).forward(x_train_part5, y_train_part5)
     # error_gt5        = y_train_part5 - error_est4 - error_est3 - error_est2 - expectation
     
     
     # ## inference
-    # expectation_inf  = kr.fit(x_train_part1, y_train_part1, x_train_part1).forward(x_test, y_test) #layer1
-    # error_est1       = kr.fit(x_train_part2, error_gt2, x_train_part2).forward(x_test, y_test) #layer2
-    # error_est2       = kr.fit(x_train_part3, error_gt3, x_train_part3).forward(x_test, y_test) #layer3
-    # error_est3       = kr.fit(x_train_part4, error_gt4, x_train_part4).forward(x_test, y_test) #layer4
-    # error_est4       = kr.fit(x_train_part5, error_gt5, x_train_part5).forward(x_test, y_test) #layer4
+    # expectation_inf, _   = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_test, y_test) #layer1
+    # error_est1, _        = kr.fit(x_train_part2, error_gt2, x_train4ma_part, y_train4ma_part).forward(x_test, y_test) #layer2
+    # error_est2, _        = kr.fit(x_train_part3, error_gt3, x_train4ma_part, y_train4ma_part).forward(x_test, y_test) #layer3
+    # error_est3, _        = kr.fit(x_train_part4, error_gt4, x_train4ma_part, y_train4ma_part).forward(x_test, y_test) #layer4
+    # error_est4, _        = kr.fit(x_train_part5, error_gt5, x_train4ma_part, y_train4ma_part).forward(x_test, y_test) #layer4
     
     # result5           = expectation_inf + error_est1 + error_est2 + error_est3 + error_est4
     # result4           = expectation_inf + error_est1 + error_est2 + error_est3
@@ -463,38 +490,35 @@ if __name__ == "__main__":
     # print("KR including bandwith fitted in %.3f s" \
     #     % (time.time() - t0))
     
-    ##### minist
-    # n_class = 10
-    # (x_train, y_train), (x_test, y_test) = mnist.load()
-    # x_train, y_train, x_test, y_test = x_train.astype('float32'), \
-    # y_train.astype('float32'), x_test.astype('float32'), y_test.astype('float32')
-    
-    # # Fit regression models
-    # t0 = time.time()
-    # kr = KernelRegression(kernel="laplacian", gamma=0.5)
-    # y_kr = kr.fit(x_train, y_train).forward(x_test, y_test) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
-    # print("KR including bandwith fitted in %.3f s" \
-    #     % (time.time() - t0))
-
-
-    #### svhn
+    # ### minist
     n_class = 10
-    (x_train, y_train), (x_test, y_test) = svhn.load_10classes()
-    kr = KernelRegression(kernel="rbf", gamma=0.2)
     
-    x_train_part1 = x_train[0:10000]
-    x_train_part2 = x_train[10000:20000]
+    (x_train, y_train), (x_test, y_test), trainset = mnist.load_10classes()
+    x_train         = torch.tensor(x_train).to("cpu")
+    y_train         = torch.tensor(y_train).to("cpu")
+    x_test          = torch.tensor(x_test).to("cpu")
+    y_test          = torch.tensor(y_test).to("cpu")
+            
+    x_train         = x_train.detach().to(torch.float32)
+    y_train         = y_train.detach().to(torch.float32)
+    x_test          = x_test.detach().to(torch.float32)
+    y_test          = y_test.detach().to(torch.float32)
     
-    y_train_part1 = y_train[0:10000]
-    y_train_part2 = y_train[10000:20000]
-    #### 2 layer:
-    ## train
-    expectation      = kr.fit(x_train_part1, y_train_part1, x_train, y_train).forward(x_train_part2, y_train_part2)
+    x_train_part1 = x_train[0:20000]
+    x_train_part2 = x_train[20000:40000]
+    
+    y_train_part1 = y_train[0:20000]
+    y_train_part2 = y_train[20000:40000]
+    
+    # Fit regression models
+    kr = KernelRegression(kernel="laplacian", gamma=0.5)
+    expectation,M      = kr.fit(x_train_part1, y_train_part1, x_train, y_train).forward(x_train_part2, y_train_part2)
+    plot_M_img_mnisit(M)
     error_gt         = y_train_part2 - expectation #每一层存x, y
     
     # ## inference
-    expectation_inf  = kr.fit(x_train_part1, y_train_part1, x_train, y_train).forward(x_test, y_test)
-    error_est        = kr.fit(x_train_part2, error_gt, x_train, y_train).forward(x_test, y_test)
+    expectation_inf,_   = kr.fit(x_train_part1, y_train_part1, x_train, y_train).forward(x_test, y_test)
+    error_est,_         = kr.fit(x_train_part2, error_gt, x_train, y_train).forward(x_test, y_test)
     result           = expectation_inf + error_est
     
     eval_metrics = {}
@@ -502,3 +526,36 @@ if __name__ == "__main__":
     p_class =  torch.argmax(result, dim=-1)
     eval_metrics['multiclass-acc'] = torch.sum(y_class == p_class).item() / len(y_class)
     print(eval_metrics)
+    
+    t0 = time.time()
+    kr = KernelRegression(kernel="laplacian", gamma=0.5)
+    y_kr = kr.fit(x_train, y_train).forward(x_test, y_test) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
+    print("KR including bandwith fitted in %.3f s" \
+        % (time.time() - t0))
+
+
+    # #### svhn
+    # n_class = 10
+    # (x_train, y_train), (x_test, y_test) = svhn.load_10classes()
+    # kr = KernelRegression(kernel="rbf", gamma=0.3)
+    
+    # x_train_part1 = x_train[0:10000]
+    # x_train_part2 = x_train[10000:20000]
+    
+    # y_train_part1 = y_train[0:10000]
+    # y_train_part2 = y_train[10000:20000]
+    # #### 2 layer:
+    # ## train
+    # expectation,_      = kr.fit(x_train_part1, y_train_part1, x_train, y_train).forward(x_train_part2, y_train_part2)
+    # error_gt         = y_train_part2 - expectation #每一层存x, y
+    
+    # # ## inference
+    # expectation_inf,_   = kr.fit(x_train_part1, y_train_part1, x_train, y_train).forward(x_test, y_test)
+    # error_est,_         = kr.fit(x_train_part2, error_gt, x_train, y_train).forward(x_test, y_test)
+    # result           = expectation_inf + error_est
+    
+    # eval_metrics = {}
+    # y_class =  torch.argmax(y_test, dim=-1)
+    # p_class =  torch.argmax(result, dim=-1)
+    # eval_metrics['multiclass-acc'] = torch.sum(y_class == p_class).item() / len(y_class)
+    # print(eval_metrics)

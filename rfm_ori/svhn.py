@@ -57,4 +57,4 @@ X_test, y_test = get_data(test_loader)
 
 # run rfm
 rfm = LaplaceRFM(bandwidth=1.)
-M, _ = rfm.fit(train_loader, test_loader, iters=1, loader=True, classif=True)
+M, _ = rfm.fit(train_loader, test_loader, iters=10, loader=True, classif=True)

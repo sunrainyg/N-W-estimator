@@ -15,7 +15,6 @@ class RecursiveFeatureMachine(torch.nn.Module):
     def __init__(self, device=torch.device('cpu'), mem_gb=32, diag=False, centering=False, reg=1e-3):
         super().__init__()
         self.M = None
-        self.model = None
         self.diag = diag # if True, Mahalanobis matrix M will be diagonal
         self.centering = centering # if True, update_M will center the gradients before taking an outer product
         self.device = device
@@ -81,7 +80,7 @@ class RecursiveFeatureMachine(torch.nn.Module):
         Detail:
         [self.kernel : (laplacian_M, input: x, z)] @ self.weights
         '''
-        return self.kernel(samples, self.centers) @ self.weights
+        return self.kernel(samples, self.centers) @ self.weights #(50000,50000) (50000,10)
 
     def fit(self, train_loader, test_loader,
             iters=3, name=None, reg=1e-3, method='lstsq', 
@@ -167,16 +166,15 @@ class LaplaceRFM(RecursiveFeatureMachine):
                 centers_term := Mz * K_M(x,z)
                 
         Equation: grad(K_M(x,z)) = (Mx-Mz) * (K_M(x,z)) / (L||x-z||_M),
-        where x is samples, z is center,
+        where x is samples, z is center
         
         '''
-        
         K = self.kernel(samples, self.centers) # K_M(X, X)
 
         dist = euclidean_distances_M(samples, self.centers, self.M, squared=False) # Ma distance
         dist = torch.where(dist < 1e-10, torch.zeros(1, device=dist.device).float(), dist) # Set those small values to 0 to avoid errors caused by dividing by too small a number.
 
-        K = K/dist # K_M(X,X) / M_distance
+        K = K/dist # K_M(X,X) / ||x-z||_M
         K[K == float("Inf")] = 0. #avoid infinite big values
 
         p, d = self.centers.shape
@@ -186,7 +184,7 @@ class LaplaceRFM(RecursiveFeatureMachine):
         samples_term = (
                 K # (n, p)
                 @ self.weights # (p, c)
-            ).reshape(n, c, 1) ## alpha * K_M(X,X) / M_distance
+            ).reshape(n, c, 1) ## alpha * K_M(x,z) / ||x-z||_M
         
         if self.diag:
             centers_term = (
@@ -207,10 +205,9 @@ class LaplaceRFM(RecursiveFeatureMachine):
                 ).reshape(p, c*d) # (p, cd)
             ).view(n, c, d) # (n, c, d) ## alpha * K_M(X,X) / M_distance
 
-            samples_term = samples_term * (samples @ self.M).reshape(n, 1, d) ## Mx * alpha * K_M(X,X) / M_distance
+            samples_term = samples_term * (samples @ self.M).reshape(n, 1, d) ## Mx * alpha * K_M(X,X) / ||x-z||_M
 
         G = (centers_term - samples_term) / self.bandwidth # (n, c, d)
-        
         if self.centering:
             G = G - G.mean(0) # (n, c, d)
         
@@ -242,7 +239,6 @@ if __name__ == "__main__":
 
     y_train = fstar(X_train).double()
     y_test = fstar(X_test).double()
-    import pdb; pdb.set_trace()
     model = LaplaceRFM(bandwidth=1., diag=False, centering=False)
     model.fit(
         (X_train, y_train), 

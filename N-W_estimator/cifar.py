@@ -18,6 +18,25 @@ classes = ('plane', 'car', 'bird', 'cat',
 
 import torch
 
+def get_data(data_loader):
+    X, y = [], []
+    for idx, batch in enumerate(data_loader):
+        inputs, labels = batch
+        X.append(inputs)
+        y.append(labels)
+    return torch.cat(X, dim=0), torch.cat(y, dim=0)
+
+def pre_process(torchset,n_samples,num_classes=10):
+    indices = list(np.random.choice(len(torchset),n_samples))
+
+    trainset = []
+    for ix in indices:
+        x,y = torchset[ix]
+        ohe_y = torch.zeros(num_classes)
+        ohe_y[y] = 1
+        trainset.append(((x/np.linalg.norm(x)).reshape(-1),ohe_y))
+    return trainset
+
 def to_categorical_tensor(y, num_classes=None, dtype=torch.float32):
     """Converts a class vector (integers) to binary class matrix.
 
@@ -124,66 +143,83 @@ def load_10classes(cifar10_dir):
                         [transforms.ToTensor(),
                         transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))])
     
+    transform_vis   = transforms.Compose(
+                        [transforms.ToTensor()])
+    
     transform_ma    = transforms.Compose(
                         # [transforms.RandomHorizontalFlip(),       # 50%的概率进行水平翻转
                         # transforms.RandomVerticalFlip(),
                         # transforms.RandomRotation(50),
-                        [transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.2, hue=0.1),
+                        [transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
                         transforms.ToTensor(),
                         transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))])
     
     trainset                  = torchvision.datasets.CIFAR10(root='./data', train=True,
                                                             download=True, transform=transform)
+    
+    trainset_vis              = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                                            download=True, transform=transform_vis)
+    
     testset                   = torchvision.datasets.CIFAR10(root='./data', train=False,
                                                             download=True, transform=transform)
     trainset4ma               = torchvision.datasets.CIFAR10(root='./data', train=True,
                                                             download=True, transform=transform_ma)
+    
+    trainset                  = pre_process(trainset, n_samples=50000, num_classes=10)
     trainloader               = torch.utils.data.DataLoader(trainset, batch_size=30000,
                                                             shuffle=False, num_workers=2)
+    testset                   = pre_process(testset, n_samples=50000, num_classes=10)
     testloader                = torch.utils.data.DataLoader(testset, batch_size=10000,
                                                             shuffle=False, num_workers=2)
+    trainset4ma               = pre_process(trainset4ma, n_samples=50000, num_classes=10)
     trainloader4ma            = torch.utils.data.DataLoader(trainset4ma, batch_size=30000,
                                                             shuffle=False, num_workers=2)
     
+    x_train, y_train          = get_data(trainloader) #y_train: torch.Size([20000, 10])
+    x_test, y_test            = get_data(testloader)
+    x_train4ma, y_train4ma    = get_data(trainloader4ma)
+    x_train4ma, y_train4ma    = torch.cat((x_train, x_train4ma), dim=0), torch.cat((y_train, y_train4ma), dim=0)
     
-    for step, (train_batch_x, train_batch_y) in enumerate(trainloader):
-        if step == 1:
-            break
-        x_train     = train_batch_x.view(30000, -1)
-        y_train_ori = train_batch_y
-        y_train     = to_categorical(y_train_ori, n_class) # label -> one hot
+    # for step, (train_batch_x, train_batch_y) in enumerate(trainloader):
+    #     if step == 1:
+    #         break
+    #     x_train     = train_batch_x.view(30000, -1)
+    #     y_train_ori = train_batch_y
+    #     y_train     = to_categorical(y_train_ori, n_class) # label -> one hot
         
-    for step, (train_batch_x4ma, train_batch_y4ma) in enumerate(trainloader4ma):
-        if step == 1:
-            break
-        x_train4ma = train_batch_x4ma.view(30000, -1)
-        ### combine data
-        x_train4ma = torch.cat((x_train, x_train4ma), dim=0)
+    # for step, (train_batch_x4ma, train_batch_y4ma) in enumerate(trainloader4ma):
+    #     if step == 1:
+    #         break
+    #     x_train4ma = train_batch_x4ma.view(30000, -1)
+    #     ### combine data
+    #     x_train4ma = torch.cat((x_train, x_train4ma), dim=0)
         
-        y_train4ma = train_batch_y4ma
-        y_train4ma = torch.cat((y_train_ori, y_train4ma), dim=0)
-        y_train4ma = to_categorical(y_train4ma, n_class) # label -> one hot
+    #     y_train4ma = train_batch_y4ma
+    #     y_train4ma = torch.cat((y_train_ori, y_train4ma), dim=0)
+    #     y_train4ma = to_categorical(y_train4ma, n_class) # label -> one hot
         
-    for step, (test_batch_x, test_batch_y) in enumerate(testloader):
-        x_test = test_batch_x.view(10000, -1)
-        y_test = test_batch_y
-        y_test = to_categorical(y_test, n_class) # label -> one hot
+    # for step, (test_batch_x, test_batch_y) in enumerate(testloader):
+    #     x_test = test_batch_x.view(10000, -1)
+    #     y_test = test_batch_y
+    #     y_test = to_categorical(y_test, n_class) # label -> one hot
     
     ### !!for corruptions!! if not use, please remove it
-    x_test_brightness, y_test_brightness    = load_cifar10c(10000, 1, './data/', False,
-                                           ['brightness'])
-    x_test_contrast, y_test_contrast        = load_cifar10c(10000, 1, './data/', False,
-                                           ['contrast'])
-    x_test_motion_blur, y_test_motion_blur  = load_cifar10c(10000, 1, './data/', False,
-                                           ['motion_blur'])
-    x_test_brightness                       = x_test_brightness.reshape(10000, -1)
-    x_test_contrast                         = x_test_contrast.reshape(10000, -1)
-    x_test_motion_blur                      = x_test_motion_blur.reshape(10000, -1)
+    # x_test_brightness, y_test_brightness    = load_cifar10c(10000, 1, './data/', False,
+    #                                        ['brightness'])
+    # x_test_contrast, y_test_contrast        = load_cifar10c(10000, 1, './data/', False,
+    #                                        ['contrast'])
+    # x_test_motion_blur, y_test_motion_blur  = load_cifar10c(10000, 1, './data/', False,
+    #                                        ['motion_blur'])
+    # x_test_brightness                       = x_test_brightness.reshape(10000, -1)
+    # x_test_contrast                         = x_test_contrast.reshape(10000, -1)
+    # x_test_motion_blur                      = x_test_motion_blur.reshape(10000, -1)
     
-    x_train4ma                              = torch.cat((x_train, x_test_brightness, x_test_contrast, x_test_motion_blur), dim=0)
-    y_train4ma                              = torch.cat((y_train_ori, y_test_brightness, y_test_contrast, y_test_motion_blur), dim=0)
-    y_train4ma                              = to_categorical(y_train4ma, n_class) # label -> one hot
-    return (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma)
+    # x_train4ma                              = torch.cat((x_train, x_test_brightness, x_test_contrast, x_test_motion_blur), dim=0)
+    # y_train4ma                              = torch.cat((y_train_ori, y_test_brightness, y_test_contrast, y_test_motion_blur), dim=0)
+    # y_train4ma                              = to_categorical(y_train4ma, n_class) # label -> one hot
+    
+    return (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma), trainset_vis
+    ############
 
 def load_2classes_ori(cifar10_dir, num_training=49000, num_validation=1000, num_test=10000):
     n_class = 2

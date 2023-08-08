@@ -110,6 +110,7 @@ class FKR_EigenPro(nn.Module):
     def forward(self, samples, weight=None):
         if weight is None:
             weight = self.weight
+        import pdb;pdb.set_trace()
         kmat = self.kernel_matrix(samples)
         pred = kmat.mm(weight)
         return pred

@@ -16,7 +16,46 @@ from sklearn.metrics import classification_report
 from sklearn.metrics import recall_score, precision_score, f1_score
 import torchvision
 from sklearn.cluster import KMeans, SpectralClustering
+import sys
+import os
+parent_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(parent_dir)
+sys.path.append(parent_dir)
+from N_W_estimator.N_W_estimator import KernelRegression
 import pdb
+
+
+def to_categorical(y, num_classes=None, dtype='float32'):
+    """Converts a class vector (integers) to binary class matrix.
+
+    E.g. for use with categorical_crossentropy.
+
+    # Arguments
+        y: class vector to be converted into a matrix
+            (integers from 0 to num_classes).
+        num_classes: total number of classes.
+        dtype: The data type expected by the input, as a string
+            (`float32`, `float64`, `int32`...)
+
+    # Returns
+        A binary matrix representation of the input. The classes axis
+        is placed last.
+    """
+    
+    y = np.array(y, dtype='int')
+    input_shape = y.shape
+    if input_shape and input_shape[-1] == 1 and len(input_shape) > 1:
+        input_shape = tuple(input_shape[:-1])
+    y = y.ravel()
+    if not num_classes:
+        num_classes = np.max(y) + 1
+    n = y.shape[0]
+    categorical = np.zeros((n, num_classes), dtype=dtype)
+
+    categorical[np.arange(n), y] = 1
+    output_shape = input_shape + (num_classes,)
+    categorical = np.reshape(categorical, output_shape)
+    return categorical
 
 # Looking for device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -32,7 +71,7 @@ transform_ma    = transforms.Compose(
                     [transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
                     transforms.ToTensor()])
 
-# Load MNIST dataset
+# Load CIFAR10 dataset
 train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
 test_dataset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
 trainset4ma  = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_ma)
@@ -46,8 +85,11 @@ train_data4ma = datasets.CIFAR10(root='./data', train=True, transform=transform_
 
 numpy_array = train_data.data.reshape(-1, 3072)  / 255.0
 tensor_float = torch.FloatTensor(numpy_array)
-tensor_double = tensor_float.double()
-X_train = tensor_double.to(device)
+X_train = tensor_float.to(device)
+
+label = to_categorical(train_data.targets)
+label = torch.FloatTensor(label)
+Y_train = label.to(device)
 
 # numpy_array = train_data4ma.data.reshape(-1, 3072) / 255.0
 # tensor_float = torch.FloatTensor(numpy_array)
@@ -61,8 +103,132 @@ kmeans = KMeans(n_clusters=11)
 kmeans.fit(X_train.cpu().numpy())
 
 # find the cluster centers
-clusters = kmeans.cluster_centers_.astype(float)
+clusters = kmeans.cluster_centers_.astype(np.float32)
 print(clusters.shape)
+
+# Find the M
+# class estimate_M():
+    
+#     def __init__(self, train_M_x, train_M_y, kernel="rbf", gamma=0.4, reg=1e-3, device='cuda'):
+#         self.kernel      = lambda x, z: self.laplacian_M(x, z, self.M, gamma)
+#         self.gamma       = gamma
+#         self.device      = device
+#         self.train_M_x   = train_M_x
+#         self.train_M_y   = train_M_y
+#         self.reg         = reg        
+    
+#     def laplacian_M(self, samples, centers, M, gamma):
+        
+#         kernel_mat = self.euclidean_distances_M(samples, centers, M, squared=False)
+#         kernel_mat.clamp_(min=0) # Guaranteed non-negative
+#         gamma = 1. / gamma
+#         kernel_mat.mul_(-gamma) # point-wise multiply
+#         kernel_mat.exp_() #point-wise exp
+#         return kernel_mat
+    
+#     def euclidean_distances_M(self, samples, centers, M, squared=False):
+#         '''
+#         Calculate the Euclidean Distances between the samples and centers, using Ma distance
+#         squared = True: rbf
+#         squared = False: lap
+#         '''
+#         ## Obtain a vector containing the square norm value for each sample point.
+#         samples_norm2 = ((samples @ M) * samples).sum(-1) # torch.Size([10000])
+
+#         if samples is centers:
+#             centers_norm2 = samples_norm2
+#         else:
+#             centers_norm2 = ((centers @ M) * centers).sum(-1) # torch.Size([10000])
+            
+#         distances = -2 * (samples @ M) @ centers.T # torch.Size([10000, 10000])
+#         distances.add_(samples_norm2.view(-1, 1))
+#         distances.add_(centers_norm2)
+
+#         if not squared:
+#             distances.clamp_(min=0).sqrt_()
+#         return distances
+        
+#     def update_M(self, samples, weights):
+
+#         samples        = torch.tensor(samples).to('cuda')
+        
+#         K = self.kernel(samples, samples) # K_M(X, X)
+#         dist = self.euclidean_distances_M(samples, samples, self.M, squared=False) # Ma distance
+#         dist = torch.where(dist < 1e-10, torch.zeros(1, device=dist.device).float(), dist) # Set those small values to 0 to avoid errors caused by dividing by too small a number.
+
+#         K = K/dist # K_M(X,X) / M_distance
+#         K[K == float("Inf")] = 0. #avoid infinite big values
+
+#         p, d = samples.shape
+#         p, c = weights.shape
+#         n, d = samples.shape
+
+#         samples_term = (
+#                 K # (n, p)
+#                 @ weights # (p, c)
+#             ).reshape(n, c, 1) ## alpha * K_M(X,X) / M_distance
+                 
+#         centers_term = (
+#             K # (n, p)
+#             @ (
+#                 weights.view(p, c, 1) * (samples @ self.M).view(p, 1, d)
+#             ).reshape(p, c*d) # (p, cd)
+#         ).view(n, c, d) # (n, c, d) ## alpha * K_M(X,X) / M_distance
+
+#         samples_term = samples_term * (samples @ self.M).reshape(n, 1, d) ## Mx * alpha * K_M(X,X) / M_distance
+
+#         G = (centers_term - samples_term) / self.gamma # (n, c, d)
+
+#         self.M = torch.einsum('ncd, ncD -> dD', G, G)/len(samples)
+#         print("self.M.shape:", self.M.shape)
+        
+#         return self.M
+    
+#     def predict(self):
+        
+#         M = torch.eye(self.train_M_x.shape[-1])
+#         self.M = M.to('cuda')
+#         print("init self.M shape:", self.M.shape)
+#         if self.train_M_x is not None:
+#             epochs = 5
+#             for epoch in range(epochs):
+                
+#                 alpha           = self.fit_predictor_lstsq(self.train_M_x, self.train_M_y) #alpha.shape: torch.Size([30000, 10])
+#                 self.M          = self.update_M(self.train_M_x, alpha)
+#                 print("One round finished")
+        
+#         return self.M
+    
+#     def fit_predictor_lstsq(self, centers, targets, batch_size=10000):
+#         '''
+#         Function: solve the alpha
+#         Equation: alpha * K(X,X) = Y
+#         Return: alpha
+#         '''
+#         itera           = centers.shape[0] / batch_size
+
+#         center_batches  = torch.split(centers, batch_size, dim=0)
+#         targets_batches = torch.split(targets, batch_size, dim=0)
+
+#         alpha_batch_list = []
+#         for i in range(int(itera)):
+#             center_bat        = torch.tensor(center_batches[i]).to('cuda')
+#             targets_bat       = torch.tensor(targets_batches[i]).to('cuda')
+#             alpha_batch_i     = torch.linalg.solve(
+#                                 self.kernel(center_bat, center_bat) 
+#                                 + self.reg*torch.eye(len(center_bat), device=center_bat.device), 
+#                                 targets_bat)
+#             alpha_batch_list.append(alpha_batch_i)
+#             del center_bat, targets_bat
+
+#         alpha = torch.cat(alpha_batch_list, dim=0)
+        
+#         return alpha
+
+# estimateM = estimate_M(torch.tensor(X_train), torch.tensor(Y_train))
+# Ma = estimateM.predict()
+######
+
 
 # make RBF network
 class RBFnet(nn.Module):
@@ -71,11 +237,12 @@ class RBFnet(nn.Module):
         # remember how many centers we have
         self.N = clusters.shape[0]
         # our mean and sigmas for the RBF layer
-        self.sigs = nn.Parameter( torch.ones(self.N,dtype=torch.float64)*5, requires_grad=False ) # our sigmas
+        self.sigs = nn.Parameter( torch.ones(self.N,dtype=torch.float32)*5, requires_grad=False ) # our sigmas
         self.mus  = nn.Parameter( torch.from_numpy(clusters), requires_grad=True ) # our means
-        self.M    = nn.Parameter( torch.eye(3072,dtype=torch.float64, requires_grad=True))
+        self.M    = nn.Parameter( torch.eye(3072,dtype=torch.float32, requires_grad=True))
+        # self.M    = nn.Parameter( Ma, requires_grad=True)
         
-        self.linear = nn.Linear(self.N, 10, dtype=torch.float64)
+        self.linear = nn.Linear(self.N, 10, dtype=torch.float32)
 
     # def forward(self, x):
     #     diffs               = (x.unsqueeze(1) - self.mus)**2
@@ -93,7 +260,6 @@ class RBFnet(nn.Module):
     def forward(self, x):
         
         ############ Ma distance ##############
-        x = x.to(torch.float64)
         samples_norm2 = ((x @ self.M) * x).sum(-1) # torch.Size([10000])
         centers_norm2 = ((self.mus @ self.M) * self.mus).sum(-1) # torch.Size([10000])
         madistances     = -2 * (x @ self.M) @ self.mus.T # torch.Size([10000, 10000])

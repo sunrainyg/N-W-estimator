@@ -10,6 +10,10 @@ import torch.nn as nn
 import pdb
 import time
 import kernel
+import sys
+import os
+parent_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(parent_dir)
 import cifar, mnist, svhn
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.base import BaseEstimator, RegressorMixin
@@ -251,6 +255,15 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         
         return self.M
     
+    def create_shift_matrix(self, input_matrix):
+        shift_matrix = torch.zeros_like(input_matrix)
+        num_rows, num_cols = input_matrix.size()
+
+        shift_amount = 3  # Shift amount for each row
+        shift_matrix[3] = torch.cat((input_matrix[3, -shift_amount:], input_matrix[3, :-shift_amount]))
+
+        return shift_matrix
+    
     def fit_predictor_lstsq(self, centers, targets, batch_size=10000):
         '''
         Function: solve the alpha
@@ -306,18 +319,17 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         """
         # K_test          = pairwise_kernels(self.x_train, x_test, metric=self.kernel, gamma=self.gamma) # K.shape (49000, 10000)
 
-        # if self.train_M_x is not None:
-        #     epochs = 5
-        #     batch_size = 10000
-        #     for epoch in range(epochs):
+        if self.train_M_x is not None:
+            epochs = 0
+            for epoch in range(epochs):
+                alpha           = self.fit_predictor_lstsq(self.train_M_x, self.train_M_y) #alpha.shape: torch.Size([30000, 10])
+                self.M          = self.update_M(self.train_M_x, alpha)
                 
-        #         alpha           = self.fit_predictor_lstsq(self.train_M_x, self.train_M_y) #alpha.shape: torch.Size([30000, 10])
-        #         self.M          = self.update_M(self.train_M_x, alpha)
-        #         print("One round finished")
+                print("One round finished")
 
-        K_test          = self.kernel_cpu(self.x_train, x_test)
-        normalized_K    = self.normalize_rows(K_test.T) # normalized_K.shape: (10000, 50000)
-        output          = self.matrix_multiplication_sum(normalized_K, self.y_train)
+        K_test                  = self.kernel_cpu(self.x_train, x_test)
+        normalized_K            = self.normalize_rows(K_test.T) # normalized_K.shape: (10000, 50000)
+        output                  = self.matrix_multiplication_sum(normalized_K, self.y_train)
         
         eval_metrics = {}
         
@@ -366,46 +378,46 @@ if __name__ == "__main__":
         plt.close()
     
     ##### cifar
-    # n_class = 10
-    # cifar10_dir = './data/cifar-10-batches-py'
-    # (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma), trainset = cifar.load_10classes(cifar10_dir)
-    # # (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma) = mnist.load_10classes(cifar10_dir)
+    n_class = 10
+    cifar10_dir = './data/cifar-10-batches-py'
+    (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma), trainset = cifar.load_10classes(cifar10_dir)
+    # (x_train, y_train), (x_test, y_test), (x_train4ma, y_train4ma) = mnist.load_10classes(cifar10_dir)
     
-    # x_train         = torch.tensor(x_train).to("cpu")
-    # y_train         = torch.tensor(y_train).to("cpu")
-    # x_test          = torch.tensor(x_test).to("cpu")
-    # y_test          = torch.tensor(y_test).to("cpu")
-    # x_train4ma      = torch.tensor(x_train4ma).to('cpu')
-    # y_train4ma      = torch.tensor(y_train4ma).to('cpu')
+    x_train         = torch.tensor(x_train).to("cpu")
+    y_train         = torch.tensor(y_train).to("cpu")
+    x_test          = torch.tensor(x_test).to("cpu")
+    y_test          = torch.tensor(y_test).to("cpu")
+    x_train4ma      = torch.tensor(x_train4ma).to('cpu')
+    y_train4ma      = torch.tensor(y_train4ma).to('cpu')
             
-    # x_train         = x_train.detach().to(torch.float32)
-    # y_train         = y_train.detach().to(torch.float32)
-    # x_test          = x_test.detach().to(torch.float32)
-    # y_test          = y_test.detach().to(torch.float32)
-    # x_train4ma      = x_train4ma.detach().to(torch.float32)
-    # y_train4ma      = y_train4ma.detach().to(torch.float32)
+    x_train         = x_train.detach().to(torch.float32)
+    y_train         = y_train.detach().to(torch.float32)
+    x_test          = x_test.detach().to(torch.float32)
+    y_test          = y_test.detach().to(torch.float32)
+    x_train4ma      = x_train4ma.detach().to(torch.float32)
+    y_train4ma      = y_train4ma.detach().to(torch.float32)
     # # Fit regression models
     
-    # x_train_part1   = x_train[0:30000]
-    # x_train_part2   = x_train4ma[30000:50000]
-    # x_train_part3   = x_train[20000:30000]
-    # x_train_part4   = x_train[30000:40000]
-    # x_train_part5   = x_train[40000:50000]
+    x_train_part1   = x_train[0:30000]
+    x_train_part2   = x_train4ma[30000:50000]
+    x_train_part3   = x_train[20000:30000]
+    x_train_part4   = x_train[30000:40000]
+    x_train_part5   = x_train[40000:50000]
     
-    # y_train_part1   = y_train[0:30000]
-    # y_train_part2   = y_train4ma[30000:50000]
-    # y_train_part3   = y_train[20000:30000]
-    # y_train_part4   = y_train[30000:40000]
-    # y_train_part5   = y_train[40000:50000]
+    y_train_part1   = y_train[0:30000]
+    y_train_part2   = y_train4ma[30000:50000]
+    y_train_part3   = y_train[20000:30000]
+    y_train_part4   = y_train[30000:40000]
+    y_train_part5   = y_train[40000:50000]
     
-    # x_train4ma_part = x_train4ma[0:60000]
-    # y_train4ma_part = y_train4ma[0:60000]
+    x_train4ma_part = x_train4ma[0:60000]
+    y_train4ma_part = y_train4ma[0:60000]
     
-    # t0 = time.time()
-    # kr = KernelRegression(kernel="rbf", gamma=0.4)
-    # # #### 1 layer:
-    # y_kr, M = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_test, y_test) # 1 layer
-    # plot_M_img(M)
+    t0 = time.time()
+    kr = KernelRegression(kernel="rbf", gamma=0.4)
+    # #### 1 layer:
+    y_kr, M = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_test, y_test) # 1 layer
+    plot_M_img(M)
     #### 2 layer:
     ## train
     # expectation, Maha      = kr.fit(x_train_part1, y_train_part1, x_train4ma_part, y_train4ma_part).forward(x_train_part2, y_train_part2)
@@ -491,47 +503,47 @@ if __name__ == "__main__":
     #     % (time.time() - t0))
     
     # ### minist
-    n_class = 10
+    # n_class = 10
     
-    (x_train, y_train), (x_test, y_test), trainset = mnist.load_10classes()
-    x_train         = torch.tensor(x_train).to("cpu")
-    y_train         = torch.tensor(y_train).to("cpu")
-    x_test          = torch.tensor(x_test).to("cpu")
-    y_test          = torch.tensor(y_test).to("cpu")
+    # (x_train, y_train), (x_test, y_test), trainset = mnist.load_10classes()
+    # x_train         = torch.tensor(x_train).to("cpu")
+    # y_train         = torch.tensor(y_train).to("cpu")
+    # x_test          = torch.tensor(x_test).to("cpu")
+    # y_test          = torch.tensor(y_test).to("cpu")
             
-    x_train         = x_train.detach().to(torch.float32)
-    y_train         = y_train.detach().to(torch.float32)
-    x_test          = x_test.detach().to(torch.float32)
-    y_test          = y_test.detach().to(torch.float32)
+    # x_train         = x_train.detach().to(torch.float32)
+    # y_train         = y_train.detach().to(torch.float32)
+    # x_test          = x_test.detach().to(torch.float32)
+    # y_test          = y_test.detach().to(torch.float32)
     
-    x_train_part1 = x_train[0:20000]
-    x_train_part2 = x_train[20000:40000]
+    # x_train_part1 = x_train[0:20000]
+    # x_train_part2 = x_train[20000:40000]
     
-    y_train_part1 = y_train[0:20000]
-    y_train_part2 = y_train[20000:40000]
+    # y_train_part1 = y_train[0:20000]
+    # y_train_part2 = y_train[20000:40000]
     
-    # Fit regression models
-    kr = KernelRegression(kernel="laplacian", gamma=0.5)
-    expectation,M      = kr.fit(x_train_part1, y_train_part1, x_train, y_train).forward(x_train_part2, y_train_part2)
-    plot_M_img_mnisit(M)
-    error_gt         = y_train_part2 - expectation #每一层存x, y
+    # # Fit regression models
+    # kr = KernelRegression(kernel="laplacian", gamma=0.5)
+    # expectation,M      = kr.fit(x_train_part1, y_train_part1, x_train, y_train).forward(x_train_part2, y_train_part2)
+    # plot_M_img_mnisit(M)
+    # error_gt         = y_train_part2 - expectation #每一层存x, y
     
-    # ## inference
-    expectation_inf,_   = kr.fit(x_train_part1, y_train_part1, x_train, y_train).forward(x_test, y_test)
-    error_est,_         = kr.fit(x_train_part2, error_gt, x_train, y_train).forward(x_test, y_test)
-    result           = expectation_inf + error_est
+    # # ## inference
+    # expectation_inf,_   = kr.fit(x_train_part1, y_train_part1, x_train, y_train).forward(x_test, y_test)
+    # error_est,_         = kr.fit(x_train_part2, error_gt, x_train, y_train).forward(x_test, y_test)
+    # result           = expectation_inf + error_est
     
-    eval_metrics = {}
-    y_class =  torch.argmax(y_test, dim=-1)
-    p_class =  torch.argmax(result, dim=-1)
-    eval_metrics['multiclass-acc'] = torch.sum(y_class == p_class).item() / len(y_class)
-    print(eval_metrics)
+    # eval_metrics = {}
+    # y_class =  torch.argmax(y_test, dim=-1)
+    # p_class =  torch.argmax(result, dim=-1)
+    # eval_metrics['multiclass-acc'] = torch.sum(y_class == p_class).item() / len(y_class)
+    # print(eval_metrics)
     
-    t0 = time.time()
-    kr = KernelRegression(kernel="laplacian", gamma=0.5)
-    y_kr = kr.fit(x_train, y_train).forward(x_test, y_test) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
-    print("KR including bandwith fitted in %.3f s" \
-        % (time.time() - t0))
+    # t0 = time.time()
+    # kr = KernelRegression(kernel="laplacian", gamma=0.5)
+    # y_kr = kr.fit(x_train, y_train).forward(x_test, y_test) # X.shape: (100, 1), y.shape: (100,) np.expand_dims(y, axis=1).shape
+    # print("KR including bandwith fitted in %.3f s" \
+    #     % (time.time() - t0))
 
 
     # #### svhn

@@ -2,7 +2,7 @@
 import collections
 import time
 import torch
-
+import kernel
 import torch.nn as nn
 import numpy as np
 import os, sys
@@ -10,6 +10,8 @@ current_directory = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_directory)
 import svd
 import utils
+
+has_called_forward = False
 
 
 def asm_eigenpro_fn(samples, map_fn, top_q, bs_gpu, alpha, min_q=5, seed=1):
@@ -72,8 +74,8 @@ def asm_eigenpro_fn(samples, map_fn, top_q, bs_gpu, alpha, min_q=5, seed=1):
                                                   kmat),
                                          eigvecs_t)))
 
-    print("SVD time: %.2f, top_q: %d, top_eigval: %.2f, new top_eigval: %.2e" %
-          (time.time() - start, top_q, eigvals[0], eigvals[0] / scale))
+    # print("SVD time: %.2f, top_q: %d, top_eigval: %.2f, new top_eigval: %.2e" %
+    #       (time.time() - start, top_q, eigvals[0], eigvals[0] / scale))
 
 
     return eigenpro_fn, scale, eigvals[0], beta
@@ -81,16 +83,21 @@ def asm_eigenpro_fn(samples, map_fn, top_q, bs_gpu, alpha, min_q=5, seed=1):
 
 class FKR_EigenPro(nn.Module):
     '''Fast Kernel Regression using EigenPro iteration.'''
-    def __init__(self, kernel_fn, centers, y_dim, device="cuda"):
+    def __init__(self, centers, target, y_dim, device="cuda"):
         super(FKR_EigenPro, self).__init__()
-        self.kernel_fn = kernel_fn
-        self.n_centers, self.x_dim = centers.shape
-        self.device = device
-        self.pinned_list = []
+        self.bandwidth              = 20
+        self.gamma                  = 1. / self.bandwidth
+        self.M                      = torch.eye(3072).cuda()
+        self.kernel_fn              = lambda x,y: kernel.laplacian_M(x, y, self.M, self.bandwidth)
+        self.n_centers, self.x_dim  = centers.shape
+        self.device                 = device
+        self.pinned_list            = []
+        self.train_y                = torch.tensor(target)
+        self.reg                    = 1e-3
 
-        self.centers = self.tensor(centers, release=True)
-        self.weight = self.tensor(torch.zeros(
-            self.n_centers, y_dim), release=True)
+        self.centers                = self.tensor(centers, release=True)
+        self.weight                 = self.tensor(torch.zeros(
+                                        self.n_centers, y_dim), release=True)
 
     def __del__(self):
         for pinned in self.pinned_list:
@@ -107,14 +114,108 @@ class FKR_EigenPro(nn.Module):
     def kernel_matrix(self, samples):
         return self.kernel_fn(samples, self.centers)
 
+    def fit_predictor_lstsq(self, centers, targets, batch_size=10000):
+        '''
+        Function: solve the alpha
+        Equation: alpha * K(X,X) = Y
+        Return: alpha
+        '''
+        itera           = centers.shape[0] / batch_size
+        # 使用torch.chunk函数将data分成5份，每份大小为10000
+        center_batches  = torch.split(centers, batch_size, dim=0)
+        targets_batches = torch.split(targets, batch_size, dim=0)
+
+        # center_batches是一个包含五个张量的列表，每个张量的形状为（10000，3072）
+        # data_batches[0]包含前10000行，data_batches[1]包含接下来的10000行，以此类推
+        alpha_batch_list = []
+        for i in range(int(itera)):
+            center_bat        = torch.tensor(center_batches[i]).to('cuda')
+            targets_bat       = torch.tensor(targets_batches[i]).to('cuda')
+            alpha_batch_i     = torch.linalg.solve(
+                                self.kernel_fn(center_bat, center_bat) 
+                                + self.reg*torch.eye(len(center_bat), device=center_bat.device), 
+                                targets_bat)
+            alpha_batch_list.append(alpha_batch_i)
+            del center_bat, targets_bat
+
+        alpha = torch.cat(alpha_batch_list, dim=0)
+        
+        return alpha
+    
+    def update_M(self, samples, weights):
+        '''
+        Input:  samples - X_train; same as centers
+                self.weights - alpha
+                
+        Notion: K := K_M(X,X) / ||x-z||_M
+                samples_term := Mx * K_M(x,z)
+                centers_term := Mz * K_M(x,z)
+                
+        Equation: grad(K_M(x,z)) = (Mx-Mz) * (K_M(x,z)) / (L||x-z||_M),
+        where x is samples, z is center,
+        '''
+        samples        = torch.tensor(samples).to('cuda')
+        K = self.kernel_fn(samples, samples) # K_M(X, X)
+        dist = kernel.modified_distances(samples, samples, self.M, squared=False) # Ma distance
+        dist = torch.where(dist < 1e-10, torch.zeros(1, device=dist.device).float(), dist) # Set those small values to 0 to avoid errors caused by dividing by too small a number.
+
+        K = K/dist # K_M(X,X) / M_distance
+        K[K == float("Inf")] = 0. #avoid infinite big values
+
+        p, d = samples.shape
+        p, c = weights.shape
+        n, d = samples.shape
+        samples_term = (
+                K # (n, p)
+                @ weights # (p, c)
+            ).reshape(n, c, 1) ## alpha * K_M(X,X) / M_distance
+                 
+        centers_term = (
+            K # (n, p)
+            @ (
+                weights.view(p, c, 1) * (samples @ self.M).view(p, 1, d)
+            ).reshape(p, c*d) # (p, cd)
+        ).view(n, c, d) # (n, c, d) ## alpha * K_M(X,X) / M_distance
+
+        samples_term = samples_term * (samples @ self.M).reshape(n, 1, d) ## Mx * alpha * K_M(X,X) / M_distance
+
+        G = (centers_term - samples_term) / self.gamma # (n, c, d)
+
+        self.M = torch.einsum('ncd, ncD -> dD', G, G)/len(samples)
+        print("self.M.shape:", self.M.shape)
+        
+        return self.M
+    
     def forward(self, samples, weight=None):
+        
         if weight is None:
             weight = self.weight
-        import pdb;pdb.set_trace()
+                
         kmat = self.kernel_matrix(samples)
         pred = kmat.mm(weight)
+        
         return pred
+    
+    def forward_eval(self, samples, weight=None):
+        global has_called_forward
+        
+        if weight is None:
+            weight = self.weight
 
+        ## Update M ##
+        if not has_called_forward:
+            epochs = 1
+            for epoch in range(epochs):
+                alpha           = self.fit_predictor_lstsq(self.centers, self.train_y) #alpha.shape: torch.Size([30000, 10])
+                self.M          = self.update_M(self.centers, alpha)
+                print("One round finished")
+            has_called_forward = True
+                
+        kmat = self.kernel_matrix(samples)
+        pred = kmat.mm(weight)
+        
+        return pred
+    
     def primal_gradient(self, samples, labels, weight):
         pred = self.forward(samples, weight)
         grad = pred - labels
@@ -150,17 +251,18 @@ class FKR_EigenPro(nn.Module):
         n_batch = n_sample / min(n_sample, bs)
         for batch_ids in np.array_split(range(n_sample), n_batch):
             x_batch = self.tensor(x_eval[batch_ids])
-            p_batch = self.forward(x_batch).cpu().data.numpy()
+            p_batch = self.forward_eval(x_batch).cpu().data.numpy()
             p_list.append(p_batch)
         p_eval = np.vstack(p_list)
 
         eval_metrics = collections.OrderedDict()
-        # if 'mse' in metrics:
-        #     eval_metrics['mse'] = np.mean(np.square(p_eval - y_eval))
-        # if 'multiclass-acc' in metrics:
-        #     y_class = np.argmax(y_eval, axis=-1)
-        #     p_class = np.argmax(p_eval, axis=-1)
-        #     eval_metrics['multiclass-acc'] = np.mean(y_class == p_class)
+        
+        if 'mse' in metrics:
+            eval_metrics['mse'] = np.mean(np.square(p_eval - y_eval))
+        if 'multiclass-acc' in metrics:
+            y_class = np.argmax(y_eval, axis=-1)
+            p_class = np.argmax(p_eval, axis=-1)
+            eval_metrics['multiclass-acc'] = np.mean(y_class == p_class)
 
         return eval_metrics
 
@@ -196,8 +298,8 @@ class FKR_EigenPro(nn.Module):
         else:
             bs, _ = self._compute_opt_params(bs, bs_gpu, beta, new_top_eigval)
 
-        print("n_subsamples=%d, bs_gpu=%d, eta=%.2f, bs=%d, top_eigval=%.2e, beta=%.2f" %
-              (n_subsamples, bs_gpu, eta, bs, top_eigval, beta))
+        # print("n_subsamples=%d, bs_gpu=%d, eta=%.2f, bs=%d, top_eigval=%.2e, beta=%.2f" %
+        #       (n_subsamples, bs_gpu, eta, bs, top_eigval, beta))
         eta = self.tensor(scale * eta / bs, dtype=torch.float)
 
         # Subsample training data for fast estimation of training loss.
@@ -223,17 +325,18 @@ class FKR_EigenPro(nn.Module):
                                           eta, sample_ids, batch_ids)
                     del x_batch, y_batch, batch_ids
 
-            # if run_epoch_eval:
-            #     train_sec += time.time() - start
-            #     tr_score = self.evaluate(x_train_eval, y_train_eval, bs)
-            #     tv_score = self.evaluate(x_val, y_val, bs)
-            #     print("train error: %.2f%%\tval error: %.2f%% (%d epochs, %.2f seconds)\t"
-            #           "train l2: %.2e\tval l2: %.2e" %
-            #           ((1 - tr_score['multiclass-acc']) * 100,
-            #           (1 - tv_score['multiclass-acc']) * 100,
-            #           epoch, train_sec, tr_score['mse'], tv_score['mse']))
-            #     res[epoch] = (tr_score, tv_score, train_sec)
+            if run_epoch_eval:
+                train_sec += time.time() - start
+                tr_score = self.evaluate(x_train_eval, y_train_eval, bs)
+                tv_score = self.evaluate(x_val, y_val, bs)
+                # print("train error: %.2f%%\tval error: %.2f%% (%d epochs, %.2f seconds)\t"
+                #       "train l2: %.2e\tval l2: %.2e" %
+                #       ((1 - tr_score['multiclass-acc']) * 100,
+                #       (1 - tv_score['multiclass-acc']) * 100,
+                #       epoch, train_sec, tr_score['mse'], tv_score['mse']))
+                res[epoch] = (tr_score, tv_score, train_sec)
+                acc        = tv_score['multiclass-acc']
 
             initial_epoch = epoch
         
-        return res
+        return res, acc

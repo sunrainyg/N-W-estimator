@@ -259,14 +259,11 @@ def train():
 
     for _ in range(epoch):
         for step, (train_batch_x, train_batch_y) in enumerate(trainloader):
+            
             x_train     = train_batch_x.view(batch_size, -1)
-
-            #print('x_train: ', x_train.shape)
             y_train     = to_categorical(train_batch_y, n_class) # label -> one hot
             #loss = model.step(x_train, train_batch_y)
             loss, y_pred = model.step(x_train, y_train)
-
-            #print('y_pred', y_pred)
         
             acc = model.score(y_pred, torch.tensor(y_train))
 

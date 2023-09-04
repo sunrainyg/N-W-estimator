@@ -18,6 +18,37 @@ classes = ('plane', 'car', 'bird', 'cat',
 
 import torch
 
+def load_train_dataset():
+    '''
+    Please modify 'cifar-10-train' if you want to use other datasets
+    '''
+    
+    print("Loading dataset...")
+    dataset = np.load("/lustre/grp/gyqlab/lism/brt/language-vision-interface/N-W-estimator/neural_kernels_code/preprocessed_data/cifar_10_train.npz")
+    X_train = dataset['X_train'].astype('float64')
+    y_train = dataset['y_train']
+    X_train = X_train.reshape(X_train.shape[0],-1)
+    X_train = X_train.astype('float32')
+    y_train = to_categorical(y_train)
+
+    return X_train, y_train
+
+def load_test_dataset():
+    '''
+    Please modify 'cifar-10-test' if you want to use other datasets
+    '''
+    print("Loading dataset...")
+    dataset = np.load("/lustre/grp/gyqlab/lism/brt/language-vision-interface/N-W-estimator/neural_kernels_code/preprocessed_data/cifar_10_test.npz")
+    X_test  = dataset['X_test'].astype('float64')
+    y_test  = dataset['y_test']
+    X_test  = X_test.reshape(X_test.shape[0],-1)
+
+    X_test  = X_test.astype('float32')
+    y_test = to_categorical(y_test)
+
+    
+    return X_test, y_test
+
 def get_data(data_loader):
     X, y = [], []
     for idx, batch in enumerate(data_loader):
@@ -166,13 +197,13 @@ def load_10classes(cifar10_dir):
                                                             download=True, transform=transform_ma)
     
     trainset                  = pre_process(trainset, n_samples=50000, num_classes=10)
-    trainloader               = torch.utils.data.DataLoader(trainset, batch_size=30000,
+    trainloader               = torch.utils.data.DataLoader(trainset, batch_size=50000,
                                                             shuffle=False, num_workers=2)
     testset                   = pre_process(testset, n_samples=50000, num_classes=10)
     testloader                = torch.utils.data.DataLoader(testset, batch_size=10000,
                                                             shuffle=False, num_workers=2)
     trainset4ma               = pre_process(trainset4ma, n_samples=50000, num_classes=10)
-    trainloader4ma            = torch.utils.data.DataLoader(trainset4ma, batch_size=30000,
+    trainloader4ma            = torch.utils.data.DataLoader(trainset4ma, batch_size=50000,
                                                             shuffle=False, num_workers=2)
     
     x_train, y_train          = get_data(trainloader) #y_train: torch.Size([20000, 10])

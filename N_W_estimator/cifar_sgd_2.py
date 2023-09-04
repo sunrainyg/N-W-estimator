@@ -110,8 +110,6 @@ class udfNetWork(nn.Module):
     def G_function(self, samples, centers, M, gamma, iteration):
 
         assert gamma > 0
-        print("centers:", centers)
-        print("M:", M)
         kernel_mat = self.euclidean_distances_M(samples, centers, M, squared=True)
         # kernel_mat = kernel_mat.clamp(min=0) # Guaranteed non-negative
         gamma = 1. / gamma

@@ -259,19 +259,14 @@ class RBFnet(nn.Module):
     def forward(self, x):
         
         ############ Ma distance ##############
-        # samples_norm2 = ((x @ self.M) * x).sum(-1) # torch.Size([10000])
-        # centers_norm2 = ((self.mus @ self.M) * self.mus).sum(-1) # torch.Size([10000])
-        # madistances     = -2 * (x @ self.M) @ self.mus.T # torch.Size([10000, 10000])
-        # madistances     = madistances.add(samples_norm2.view(-1, 1))
-        # madistances     = madistances.add(centers_norm2)
-        # madistances     = madistances.clamp(min=0).sqrt()
-        #######################################
+        pdb.set_trace()
         samples_norm2 = ((x @ self.M) * x).sum(-1) # torch.Size([10000])
         centers_norm2 = ((self.mus @ self.M) * self.mus).sum(-1) # torch.Size([10000])
         madistances     = -2 * (x @ self.M) @ self.mus.T # torch.Size([10000, 10000])
         madistances     = madistances.add(samples_norm2.view(-1, 1))
         madistances     = madistances.add(centers_norm2)
         madistances     = madistances.clamp(min=0).sqrt()
+        #######################################
 
         # Calculate the Gaussian activations
         res                 = torch.exp((1. / 0.6) * (madistances) / self.sigs**2)

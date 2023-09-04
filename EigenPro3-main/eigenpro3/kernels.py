@@ -1,31 +1,28 @@
 '''Implementation of kernel functions.'''
 
 import torch
-import cifar
-import pdb
 
 eps = 1e-12
 
-def euclidean_distances(samples, centers, squared=True):
+def euclidean(samples, centers, squared=True):
     '''Calculate the pointwise distance.
 
     Args:
-        samples: of shape (n_sample, n_feature). := x
-        centers: of shape (n_center, n_feature). := x_i
+        samples: of shape (n_sample, n_feature).
+        centers: of shape (n_center, n_feature).
         squared: boolean.
 
     Returns:
         pointwise distances (n_sample, n_center).
     '''
-
-    samples_norm = torch.sum(samples**2, dim=1, keepdim=True) # center: torch.Size([49000, 3072]); samples: torch.Size([1758, 3072])
+    samples_norm = torch.sum(samples**2, dim=1, keepdim=True)
     if samples is centers:
         centers_norm = samples_norm
     else:
         centers_norm = torch.sum(centers**2, dim=1, keepdim=True)
     centers_norm = torch.reshape(centers_norm, (1, -1))
 
-    distances = samples.mm(torch.t(centers)) # distances: torch.Size([1758, 49000])
+    distances = samples.mm(torch.t(centers))
     distances.mul_(-2)
     distances.add_(samples_norm)
     distances.add_(centers_norm)
@@ -35,21 +32,10 @@ def euclidean_distances(samples, centers, squared=True):
 
     return distances
 
-def modified_distances(samples, centers, M, squared=True):
-
-    samples_norm2 = ((samples @ M) * samples).sum(-1) # torch.Size([10000])
-    centers_norm2 = ((centers @ M) * centers).sum(-1) # torch.Size([10000])
-    madistances     = -2 * (samples @ M) @ centers.T # torch.Size([10000, 10000])
-    madistances     = madistances.add(samples_norm2.view(-1, 1))
-    madistances     = madistances.add(centers_norm2)
-    madistances     = madistances.clamp(min=0).sqrt()
-
-    return madistances
-
 
 def gaussian(samples, centers, bandwidth):
     '''Gaussian kernel.
-    
+
     Args:
         samples: of shape (n_sample, n_feature).
         centers: of shape (n_center, n_feature).
@@ -58,14 +44,14 @@ def gaussian(samples, centers, bandwidth):
     Returns:
         kernel matrix of shape (n_sample, n_center).
     '''
-    
     assert bandwidth > 0
-    kernel_mat = euclidean_distances(samples, centers)
+    kernel_mat = euclidean(samples, centers)
     kernel_mat.clamp_(min=0)
     gamma = 1. / (2 * bandwidth ** 2)
     kernel_mat.mul_(-gamma)
     kernel_mat.exp_()
     return kernel_mat
+
 
 def laplacian(samples, centers, bandwidth):
     '''Laplacian kernel.
@@ -79,34 +65,13 @@ def laplacian(samples, centers, bandwidth):
         kernel matrix of shape (n_sample, n_center).
     '''
     assert bandwidth > 0
-    kernel_mat = euclidean_distances(samples, centers, squared=False)
+    kernel_mat = euclidean(samples, centers, squared=False)
     kernel_mat.clamp_(min=0)
     gamma = 1. / bandwidth
     kernel_mat.mul_(-gamma)
     kernel_mat.exp_()
     return kernel_mat
 
-def laplacian_M(samples, centers, M, bandwidth):
-    '''
-    Laplacian kernel using Ma distance.
-
-    Args:
-        samples: of shape (n_sample, n_feature).
-        centers: of shape (n_center, n_feature).
-        M: of shape (n_feature, n_feature) or (n_feature,)
-        bandwidth: kernel bandwidth. same as gamma
-
-    Returns:
-        kernel matrix of shape (n_sample, n_center).
-    '''
-    
-    assert bandwidth > 0
-    kernel_mat = modified_distances(samples, centers, M, squared=False)
-    kernel_mat.clamp_(min=0)
-    gamma = 1. / bandwidth
-    kernel_mat.mul_(-gamma)
-    kernel_mat.exp_()
-    return kernel_mat
 
 def dispersal(samples, centers, bandwidth, gamma):
     '''Dispersal kernel.
@@ -121,11 +86,12 @@ def dispersal(samples, centers, bandwidth, gamma):
         kernel matrix of shape (n_sample, n_center).
     '''
     assert bandwidth > 0
-    kernel_mat = euclidean_distances(samples, centers)
+    kernel_mat = euclidean(samples, centers)
     kernel_mat.pow_(gamma / 2.)
     kernel_mat.mul_(-1. / bandwidth)
     kernel_mat.exp_()
     return kernel_mat
+
 
 def ntk_relu(X, Z, depth=1, bias=0.):
     """
@@ -182,7 +148,7 @@ if __name__ == "__main__":
     Z = torch.randn(m, d, device=DEVICE)
     Z_ = normalize(Z, dim=-1)
     KXZ_ntk = ntk_relu(X, Z, 64, bias=1.)
-    KXZ_ntk_ = ntk_relu_normalized(X_, Z_, 64, bias=1.)
+    KXZ_ntk_ = ntk_relu_unit_sphere(X_, Z_, 64, bias=1.)
     print(
         KXZ_ntk.diag().max().item(), 
         KXZ_ntk_.diag().max().item()

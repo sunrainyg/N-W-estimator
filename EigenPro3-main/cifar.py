@@ -84,12 +84,12 @@ def load_CIFAR10(ROOT):
     del X, Y
     Xte, Yte = load_CIFAR_batch(os.path.join(ROOT, 'test_batch'))
     return Xtr, Ytr, Xte, Yte
-
+    
 def load():
     # Load the raw CIFAR-10 data
     transform               = transforms.Compose(
                                 [transforms.ToTensor(),
-                                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
+                                transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))])
     
     transform_ma            = transforms.Compose(
                                 # [transforms.RandomHorizontalFlip(),       # 50%的概率进行水平翻转
@@ -131,9 +131,7 @@ def load():
     # x_train, y_train        = torch.cat((x_train, x_train_ma[0:20000]), dim=0), np.concatenate((y_train, y_train_ma[0:20000]), axis=0)
     
     x_train, y_train, x_test, y_test = x_train.numpy(), y_train, x_test.numpy(), y_test
-    
     return (x_train, y_train), (x_test, y_test), (x_train_ma, y_train_ma)
-    
 
 
 if __name__ == "__main__":
